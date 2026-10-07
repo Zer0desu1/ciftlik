@@ -10,7 +10,7 @@ import { Bar, Button, Card, Chip, IconBadge, Pill, Ring, Row, Screen, SectionHea
 import { dayOf, hourOf } from '@/game/clock';
 import { HATCH_HOURS, INCUBATOR_SIZE, ITEMS, MEALS, SPECIES, type SpeciesId } from '@/game/data';
 import { herdOf, productReady } from '@/game/selectors';
-import { animalValue, barnCapacity, currentMeal, dueAt, isAdult, isOld, levelOf, useGame, type Animal } from '@/game/store';
+import { animalValue, barnCapacity, coopCapacity, inBarn, inCoop, currentMeal, dueAt, isAdult, isOld, levelOf, useGame, type Animal } from '@/game/store';
 import { C, F, R, S } from '@/theme';
 
 /** "İnekler" → "İnekleri", "Tavuklar" → "Tavukları": the plural's last vowel picks the ending. */
@@ -197,7 +197,9 @@ export default function LivestockScreen() {
       <Card style={{ gap: S.lg }}>
         <Row style={{ justifyContent: 'space-between' }}>
           <View>
-            <Txt v="caption">TOPLAM · AHIR {barnCapacity(state)} HAYVANLIK</Txt>
+            <Txt v="caption">
+              AHIR {inBarn(state)}/{barnCapacity(state)} · KÜMES {inCoop(state)}/{coopCapacity(state)}
+            </Txt>
             <Txt v="display">{state.animals.length} hayvan</Txt>
           </View>
           <Pill text={avg(state.animals.map((a) => a.health)) > 70 ? 'Sağlıklı' : 'İlgi istiyor'} tone={avg(state.animals.map((a) => a.health)) > 70 ? 'green' : 'rose'} />

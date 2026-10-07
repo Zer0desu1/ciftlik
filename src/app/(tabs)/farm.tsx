@@ -1,16 +1,17 @@
 import { router, type Href } from 'expo-router';
-import { ArrowRight, Bot, Droplets, Fish, Hand, Home, Lock, Map, Maximize2, Move, Package, PawPrint, Shovel, Sprout, Sun, Wheat, Zap } from 'lucide-react-native';
+import { ArrowRight, Bot, Droplets, Fish, Hand, Home, Lock, Map, Maximize2, Move, Package, PawPrint, Sprout, Wheat, Zap } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { WeatherIcon } from '@/components/art/weather';
+import { ConvertCard, UseIcon } from '@/components/land-convert';
 import { FarmMap, type ZoneId } from '@/components/farm-map';
 import { Button, Card, Chip, IconBadge, Meter, Row, SectionHeader, Txt } from '@/components/ui';
 import { dayOf, hourOf, isNight, weatherFor } from '@/game/clock';
 import { BASE_PLOTS, CROPS, FIELDS, LAND_AREA, LAND_USES, SPECIES, landName, type FieldId, type LandUse, type SpeciesId } from '@/game/data';
 import { fishCount, herdOf, inventoryValue, plantedCount, summarizeField } from '@/game/selectors';
-import { barnCapacity, farmArea, landPrice, levelOf, levelProgress, ownedFields, ownedLand, ownsLand, pondCapacity, powerBalance, powerMade, tankCapacity, useGame, type GameState } from '@/game/store';
+import { barnCapacity, coopCapacity, farmArea, inBarn, inCoop, landPrice, levelOf, levelProgress, ownedFields, ownedLand, ownsLand, pondCapacity, powerBalance, powerMade, tankCapacity, useGame, type GameState } from '@/game/store';
 import { C, S } from '@/theme';
 
 const CHIP_LABEL = {
@@ -85,76 +86,6 @@ function LandCard({ field, state }: { field: FieldId; state: GameState }) {
   );
 }
 
-function UseIcon({ use, color }: { use: LandUse; color: string }) {
-  if (use === 'field') return <Sprout size={16} color={color} />;
-  if (use === 'barn') return <PawPrint size={16} color={color} />;
-  if (use === 'pond') return <Fish size={16} color={color} />;
-  if (use === 'solar') return <Sun size={16} color={color} />;
-  if (use === 'empty') return <Shovel size={16} color={color} />;
-  return <Droplets size={16} color={color} />;
-}
-
-/** Turning a piece of land into something else, or picking it up to move it. */
-function ConvertCard({ field, state, onMove }: { field: FieldId; state: GameState; onMove: () => void }) {
-  const use = state.land[field]!;
-  const level = levelOf(state.xp);
-  const { convertLand } = useGame.getState();
-  // A field with crops on it asks once before digging them up.
-  const [asking, setAsking] = useState<LandUse | null>(null);
-  const growing = use === 'field' ? state.fields[field].filter((p) => p.crop && !p.dead).length : 0;
-  const pick = (u: LandUse) => (growing ? setAsking(u) : convertLand(field, u));
-  return (
-    <Card style={{ gap: S.sm }}>
-      <Txt v="label">{use === 'empty' ? 'Bu arazi ne olsun?' : 'Bu araziyi değiştir'}</Txt>
-      <Txt v="caption">
-        {use === 'field'
-          ? 'Tarlayı bozup başka bir şey yapabilirsin. Üzerindeki ekinler sökülür.'
-          : 'Hayvanlar ya da balıklar varsa önce kalan yere sığmaları gerekir.'}
-      </Txt>
-      {asking ? (
-        <View style={{ gap: S.sm }}>
-          <Txt v="body" style={{ color: C.rose }}>
-            {growing} ekin sökülecek ve kaybolacak. {defOf(field).name}, {LAND_USES[asking].name.toLowerCase()} olsun mu?
-          </Txt>
-          <Row gap={S.sm}>
-            <Button small kind="ghost" label="Vazgeç" onPress={() => setAsking(null)} style={{ flex: 1 }} />
-            <Button
-              small
-              kind="danger"
-              label="Tarlayı boz"
-              onPress={() => {
-                convertLand(field, asking, true);
-                setAsking(null);
-              }}
-              style={{ flex: 1 }}
-            />
-          </Row>
-        </View>
-      ) : (
-        <Row gap={S.sm} style={{ flexWrap: 'wrap' }}>
-          {USES.filter((u) => u !== use).map((u) => {
-            const needs = LAND_USES[u].level > level;
-            const cost = LAND_USES[u].cost;
-            return (
-              <Button
-                key={u}
-                small
-                kind="soft"
-                label={needs ? `${LAND_USES[u].name} · Sv. ${LAND_USES[u].level}` : u === 'empty' ? (use === 'field' ? 'Tarlayı boz' : 'Boşalt') : `${LAND_USES[u].name} · ${cost}`}
-                icon={<UseIcon use={u} color={C.green} />}
-                onPress={() => pick(u)}
-                disabled={needs || state.coins < cost}
-                style={{ flexGrow: 1 }}
-              />
-            );
-          })}
-        </Row>
-      )}
-      <Button small kind="ghost" label="Yerini değiştir" icon={<Move size={14} color={C.green} />} onPress={onMove} />
-    </Card>
-  );
-}
-
 /** Land used for something other than a field: what it adds to the farm. */
 function UseCard({ field, state }: { field: FieldId; state: GameState }) {
   const use = state.land[field]!;
@@ -172,7 +103,8 @@ function UseCard({ field, state }: { field: FieldId; state: GameState }) {
     );
   }
   const go: Record<Exclude<LandUse, 'field' | 'empty'>, { label: string; href: Href; now: string }> = {
-    barn: { label: 'Hayvanlara git', href: '/livestock', now: `Ahırda ${state.animals.length} / ${barnCapacity(state)} hayvan` },
+    barn: { label: 'Hayvanlara git', href: '/livestock', now: `Ahırda ${inBarn(state)} / ${barnCapacity(state)} hayvan` },
+    coop: { label: 'Tavuklara git', href: '/livestock', now: `Kümeste ${inCoop(state)} / ${coopCapacity(state)} tavuk` },
     pond: { label: 'Havuza git', href: '/pond', now: `Havuzda ${state.pond.batches.reduce((n, b) => n + b.count, 0)} / ${pondCapacity(state)} balık` },
     tank: { label: 'Suya git', href: '/water', now: `Depoda ${Math.round(state.tank)} / ${tankCapacity(state)} L su` },
     solar: { label: 'Elektriğe git', href: '/power', now: `Çiftlik şu an ${powerMade(state).toFixed(1)} kWh/sa üretiyor` },
@@ -197,8 +129,8 @@ function ZoneCard({ zone, state, onMove }: { zone: ZoneId; state: GameState; onM
     if (!ownsLand(state, zone)) return <LandCard field={zone} state={state} />;
     return (
       <>
+        <ConvertCard field={zone} onMove={() => onMove(zone)} />
         {state.land[zone] === 'field' ? <PlaceCard zone={zone} state={state} /> : <UseCard field={zone} state={state} />}
-        <ConvertCard field={zone} state={state} onMove={() => onMove(zone)} />
       </>
     );
   }
@@ -234,7 +166,7 @@ function PlaceCard({ zone, state }: { zone: ZoneId; state: GameState }) {
   } else if (zone === 'animals') {
     icon = <PawPrint size={20} color={C.rose} />;
     tint = C.roseSoft;
-    subtitle = `${state.animals.length} / ${barnCapacity(state)} hayvan · ahır %${Math.round(state.barnClean)} temiz`;
+    subtitle = `Ahır ${inBarn(state)} / ${barnCapacity(state)} · kümes ${inCoop(state)} / ${coopCapacity(state)} · %${Math.round(state.barnClean)} temiz`;
     const avgFull = state.animals.length ? state.animals.reduce((n, a) => n + a.fullness, 0) / state.animals.length : 0;
     body = (
       <>
@@ -348,6 +280,11 @@ export default function FarmScreen() {
     }
     setZone(zone === z ? null : z);
   };
+  // Carried and let go: over other land of ours the two trade places.
+  const drop = (from: FieldId, to: FieldId | null) => {
+    if (to && ownsLand(useGame.getState(), to)) useGame.getState().swapLand(from, to);
+    setMoving(null);
+  };
   const hold = (z: ZoneId) => {
     if (isLand(z) && ownsLand(state, z)) pickUp(z);
   };
@@ -379,7 +316,7 @@ export default function FarmScreen() {
 
         <View style={{ paddingHorizontal: S.xl, gap: S.lg }}>
           <Card style={{ padding: S.md, alignItems: 'center' }}>
-            <FarmMap state={state} selected={zone} onSelect={tap} onHold={hold} moving={moving} size={mapSize} />
+            <FarmMap state={state} selected={zone} onSelect={tap} onHold={hold} onDrop={drop} moving={moving} size={mapSize} />
           </Card>
 
           {moving ? (
@@ -387,7 +324,7 @@ export default function FarmScreen() {
               <Move size={22} color={C.amber} />
               <View style={{ flex: 1 }}>
                 <Txt v="label">{zoneName(state, moving)} taşınıyor</Txt>
-                <Txt v="caption">Yer değiştirmek için başka bir arazine dokun</Txt>
+                <Txt v="caption">Sürükleyip başka bir araziye bırak ya da o araziye dokun</Txt>
               </View>
               <Button small kind="ghost" label="Vazgeç" onPress={() => setMoving(null)} />
             </Card>
@@ -397,7 +334,7 @@ export default function FarmScreen() {
             <Card tint={C.greenSoft} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
               <Hand size={22} color={C.green} />
               <View style={{ flex: 1 }}>
-                <Txt v="label">Bir bölgeye dokun; taşımak için basılı tut</Txt>
+                <Txt v="label">Bir bölgeye dokun; araziyi taşımak için basılı tutup sürükle</Txt>
                 <Txt v="caption">
                   {plantedCount(state)} ekili parsel · {state.animals.length} hayvan
                   {forSale ? ` · ${forSale} satılık arazi` : ''}

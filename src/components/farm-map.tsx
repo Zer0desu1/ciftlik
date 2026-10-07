@@ -192,6 +192,22 @@ function PasturePatch({ zone }: { zone: FieldId }) {
   );
 }
 
+/** Land given over to hens: a henhouse, a run of sand, a feeder. */
+function CoopPatch({ zone }: { zone: FieldId }) {
+  const z = ZONES[zone];
+  return (
+    <G>
+      <Rect x={z.x} y={z.y} width={z.w} height={z.h} rx={12} fill="#B4DD95" />
+      <Rect x={z.x + 46} y={z.y + 28} width={z.w - 54} height={z.h - 36} rx={8} fill="#E3D1A6" stroke="#B89B66" strokeWidth={1.2} strokeDasharray="3 3" />
+      <Rect x={z.x + 10} y={z.y + 38} width={30} height={24} rx={2} fill="#C98A3E" />
+      <Path d={`M${z.x + 7} ${z.y + 39} L${z.x + 25} ${z.y + 28} L${z.x + 43} ${z.y + 39}`} fill="#9C5B2A" />
+      <Circle cx={z.x + 25} cy={z.y + 50} r={4} fill="#5B3A1C" />
+      <Path d={`M${z.x + 19} ${z.y + 62} l12 10`} stroke="#8A6A44" strokeWidth={2} />
+      <Circle cx={z.x + z.w - 22} cy={z.y + z.h - 18} r={6} fill="#C9A13E" />
+    </G>
+  );
+}
+
 /** Land given over to more fish: a second pond. */
 function PondPatch({ zone }: { zone: FieldId }) {
   const z = ZONES[zone];
@@ -386,6 +402,41 @@ class MapCamera {
   pan: PanResponderInstance;
   /** When the last drag ended: the click a mouse sends on release is not a tap. */
   private draggedAt = 0;
+  /** Land picked up by a long press, carried by the next drag instead of the map. */
+  private carrying: FieldId | null = null;
+  private carryMoved = false;
+  private panning = false;
+  private hovered: FieldId | null = null;
+  /** Where the carried land is drawn, offset from its own place, in drawing pixels. */
+  ghost = new Animated.ValueXY({ x: 0, y: 0 });
+  private listener: { hover: (to: FieldId | null) => void; drop: (from: FieldId, to: FieldId | null) => void } | null = null;
+
+  listen(l: MapCamera['listener']) {
+    this.listener = l;
+  }
+
+  /** A long press picked up a piece of land: the finger now carries it. */
+  pickUp(zone: FieldId) {
+    this.carrying = zone;
+    this.carryMoved = false;
+    this.ghost.setValue({ x: 0, y: 0 });
+  }
+
+  /** The press that picked land up ended without a drag: leave it to tap-to-place. */
+  pressEnded() {
+    setTimeout(() => {
+      if (!this.panning && !this.carryMoved) this.carrying = null;
+    }, 0);
+  }
+
+  /** The land under a point of the drawing, in map units. */
+  private landAt(x: number, y: number): FieldId | null {
+    const hit = FIELDS.find((f) => {
+      const z = ZONES[f.id];
+      return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+    });
+    return hit ? hit.id : null;
+  }
 
   constructor() {
     let start: Cam = this.cam;
@@ -396,6 +447,7 @@ class MapCamera {
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponderCapture: (_e, g) => g.numberActiveTouches > 1 || Math.abs(g.dx) + Math.abs(g.dy) > 6,
       onPanResponderGrant: (e, g) => {
+        this.panning = true;
         start = this.cam;
         pinch = g.numberActiveTouches > 1 && e.nativeEvent.touches.length > 1 ? { d: touchDistance(e), mid: touchMiddle(e) } : null;
       },
@@ -410,20 +462,48 @@ class MapCamera {
           const half = this.geo.size / 2;
           const moved = { ...start, x: start.x + mid.x - pinch.mid.x, y: start.y + mid.y - pinch.mid.y };
           this.zoomAt(touchDistance(e) / pinch.d, half, half, moved);
+        } else if (this.carrying) {
+          // Carrying land: it follows the finger, and the land beneath lights up.
+          this.carryMoved = true;
+          const s = this.cam.s;
+          this.ghost.setValue({ x: g.dx / s, y: g.dy / s });
+          const z = ZONES[this.carrying];
+          const k = this.geo.k;
+          const over = this.landAt(z.x + z.w / 2 + g.dx / (s * k), z.y + z.h / 2 + g.dy / (s * k));
+          const to = over && over !== this.carrying ? over : null;
+          if (to !== this.hovered) {
+            this.hovered = to;
+            this.listener?.hover(to);
+          }
         } else if (!pinch) {
           this.apply({ ...start, x: start.x + g.dx, y: start.y + g.dy });
         }
       },
       onPanResponderRelease: () => {
         pinch = null;
-        this.draggedAt = Date.now();
+        this.endGesture();
       },
       onPanResponderTerminate: () => {
         pinch = null;
-        this.draggedAt = Date.now();
+        this.endGesture();
       },
       onPanResponderTerminationRequest: () => false,
     });
+  }
+
+  private endGesture() {
+    this.panning = false;
+    this.draggedAt = Date.now();
+    if (this.carrying && this.carryMoved) {
+      const from = this.carrying;
+      const to = this.hovered;
+      this.carrying = null;
+      this.hovered = null;
+      this.listener?.hover(null);
+      this.listener?.drop(from, to);
+      // Back to its place: if it moved, the land itself is redrawn there.
+      Animated.spring(this.ghost, { toValue: { x: 0, y: 0 }, useNativeDriver: false, speed: 30, bounciness: 0 }).start();
+    }
   }
 
   /** Whether a press is a real tap, not the end of a drag. */
@@ -489,6 +569,7 @@ export function FarmMap({
   onSelect,
   onHold,
   moving,
+  onDrop,
   size,
 }: {
   state: GameState;
@@ -498,6 +579,8 @@ export function FarmMap({
   onHold?: (zone: ZoneId) => void;
   /** The land being moved, if any: the other land is where it can go. */
   moving?: FieldId | null;
+  /** Land carried and let go over other land (or over nothing: `to` is null). */
+  onDrop?: (from: FieldId, to: FieldId | null) => void;
   size: number;
 }) {
   const fish = state.pond.batches.reduce((n, b) => n + b.count, 0);
@@ -511,6 +594,17 @@ export function FarmMap({
   const minZoom = Math.min(size / (WORLD.w * k), size / (WORLD.h * k));
 
   const [camera] = useState(() => new MapCamera());
+  const [carried, setCarried] = useState<FieldId | null>(null);
+  const [dropOn, setDropOn] = useState<FieldId | null>(null);
+  useEffect(() => {
+    camera.listen({
+      hover: setDropOn,
+      drop: (from, to) => {
+        setCarried(null);
+        onDrop?.(from, to);
+      },
+    });
+  }, [camera, onDrop]);
   const node = useRef<View>(null);
 
   // Follow the selection: in on a zone, or back out to the whole farm.
@@ -572,6 +666,7 @@ export function FarmMap({
                 {zone === 'house' ? <House panels={state.power.panels} turbines={state.power.turbines} /> : null}
                 {field && use === 'field' ? <FieldPatch zone={field.id} plots={state.fields[field.id]} /> : null}
                 {field && use === 'barn' ? <PasturePatch zone={field.id} /> : null}
+                {field && use === 'coop' ? <CoopPatch zone={field.id} /> : null}
                 {field && use === 'pond' ? <PondPatch zone={field.id} /> : null}
                 {field && use === 'tank' ? <TankPatch zone={field.id} level={Math.min(1, state.tank / 2000)} /> : null}
                 {field && use === 'solar' ? <SolarPatch zone={field.id} /> : null}
@@ -579,6 +674,9 @@ export function FarmMap({
                 {field && land ? <ForSale zone={field.id} price={land.price} level={land.level} locked={land.level > level} /> : null}
                 {moving === zone ? (
                   <Rect x={ZONES[zone].x - 2} y={ZONES[zone].y - 2} width={ZONES[zone].w + 4} height={ZONES[zone].h + 4} rx={14} fill="#F2C94C33" stroke="#D08A12" strokeWidth={3} strokeDasharray="7 5" />
+                ) : null}
+                {zone === dropOn ? (
+                  <Rect x={ZONES[zone].x - 3} y={ZONES[zone].y - 3} width={ZONES[zone].w + 6} height={ZONES[zone].h + 6} rx={15} fill={state.land[zone as FieldId] ? '#3E8A5755' : '#C0392B33'} stroke={state.land[zone as FieldId] ? '#1F5C3A' : '#C0392B'} strokeWidth={3} />
                 ) : null}
                 {target ? (
                   <Rect x={ZONES[zone].x + 1} y={ZONES[zone].y + 1} width={ZONES[zone].w - 2} height={ZONES[zone].h - 2} rx={12} fill="#FFFFFF33" stroke="#1F5C3A" strokeWidth={1.5} strokeDasharray="4 4" />
@@ -618,12 +716,40 @@ export function FarmMap({
               accessibilityRole="button"
               accessibilityLabel={z.label}
               onPress={() => camera.isTap() && onSelect(zone)}
-              onLongPress={() => camera.isTap() && onHold?.(zone)}
-              delayLongPress={450}
+              onLongPress={() => {
+                if (!camera.isTap()) return;
+                const f = FIELDS.find((x) => x.id === zone);
+                if (f && state.land[f.id]) {
+                  camera.pickUp(f.id);
+                  setCarried(f.id);
+                }
+                onHold?.(zone);
+              }}
+              onPressOut={() => camera.pressEnded()}
+              delayLongPress={400}
               style={{ position: 'absolute', left: z.x * k, top: z.y * k, width: z.w * k, height: z.h * k }}
             />
           );
         })}
+        {carried ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.ghost,
+              {
+                left: ZONES[carried].x * k,
+                top: ZONES[carried].y * k,
+                width: ZONES[carried].w * k,
+                height: ZONES[carried].h * k,
+                backgroundColor: GHOST[state.land[carried] ?? 'empty'],
+                transform: camera.ghost.getTranslateTransform(),
+              },
+            ]}>
+            <View style={styles.ghostLabel}>
+              <SvgLessLabel text={state.land[carried] ? landName(FIELDS.find((f) => f.id === carried)!, state.land[carried]!) : ''} />
+            </View>
+          </Animated.View>
+        ) : null}
       </Animated.View>
 
       <View style={styles.zoom}>
@@ -641,6 +767,25 @@ export function FarmMap({
   );
 }
 
+/** The colour a piece of land shows while carried, by what is on it. */
+const GHOST: Record<LandUse, string> = {
+  empty: '#C3DDA4EE',
+  field: '#8C5A32EE',
+  barn: '#B4DD95EE',
+  coop: '#E8D9B0EE',
+  pond: '#58A9DEEE',
+  tank: '#CBD6DEEE',
+  solar: '#2F4F7AEE',
+};
+
+function SvgLessLabel({ text }: { text: string }) {
+  return (
+    <Animated.Text style={{ fontFamily: F.bold, fontSize: 12, color: '#1C2A20' }} numberOfLines={1}>
+      {text}
+    </Animated.Text>
+  );
+}
+
 const ROADS = 'M116 0 V360 M0 116 H560 M188 228 V480 M0 228 H560 M364 0 V480 M0 364 H560';
 
 /** On the web, a drag over the map moves the map rather than the page. */
@@ -648,6 +793,20 @@ const WEB_NO_SCROLL = (Platform.OS === 'web' ? { touchAction: 'none', cursor: 'g
 
 const styles = StyleSheet.create({
   zoom: { position: 'absolute', right: 8, bottom: 8, gap: 6 },
+  ghost: {
+    position: 'absolute',
+    borderRadius: 12,
+    borderWidth: 3,
+    borderColor: '#D08A12',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
+  ghostLabel: { backgroundColor: '#FFFFFFEE', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
   zoomBtn: {
     width: 32,
     height: 32,

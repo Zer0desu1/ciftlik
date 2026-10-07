@@ -150,13 +150,14 @@ export const FIELDS: FieldDef[] = [
   { id: 'far', name: 'Uzak Tarla', place: 'Uzak', plots: 8, suggested: ['pumpkin', 'corn'], land: { price: 1500, level: 5 } },
 ];
 
-export type LandUse = 'empty' | 'field' | 'barn' | 'pond' | 'tank' | 'solar';
+export type LandUse = 'empty' | 'field' | 'barn' | 'coop' | 'pond' | 'tank' | 'solar';
 
 /** What a piece of land can be made into, what that costs, and what it adds. */
 export const LAND_USES: Record<LandUse, { name: string; suffix: string; cost: number; level: number; adds: number; blurb: string }> = {
   empty: { name: 'Boş arazi', suffix: 'Arazisi', cost: 0, level: 1, adds: 0, blurb: 'Ne olacağına sen karar ver' },
   field: { name: 'Tarla', suffix: 'Tarlası', cost: 100, level: 1, adds: 8, blurb: '8 parsellik tarla' },
-  barn: { name: 'Ahır ve mera', suffix: 'Ahırı', cost: 400, level: 2, adds: 20, blurb: '+20 hayvanlık yer' },
+  barn: { name: 'Ahır ve mera', suffix: 'Ahırı', cost: 400, level: 2, adds: 20, blurb: '+20 inek, koyun ya da keçilik yer' },
+  coop: { name: 'Kümes', suffix: 'Kümesi', cost: 250, level: 1, adds: 20, blurb: '+20 tavukluk yer' },
   pond: { name: 'Balık havuzu', suffix: 'Havuzu', cost: 300, level: 2, adds: 12, blurb: '+12 balıklık yer' },
   tank: { name: 'Su deposu', suffix: 'Su Deposu', cost: 200, level: 1, adds: 1000, blurb: '+1.000 litre su' },
   solar: { name: 'Güneş tarlası', suffix: 'Güneş Tarlası', cost: 600, level: 3, adds: 8, blurb: 'Öğlen 8 kWh/saat elektrik' },
@@ -285,7 +286,10 @@ export const POND_CAPACITY = 24;
 export const TANK_CAPACITY = 1000;
 /** Litres a single watering takes from the tank. */
 export const WATER_PER_PLOT = 40;
+/** Room for the cows, sheep and goats. */
 export const BARN_CAPACITY = 40;
+/** Room for the hens, and eggs in the incubator: they live apart, in the coop. */
+export const COOP_CAPACITY = 20;
 /**
  * Fullness an animal loses per game hour. Fed at 18:00, it is still half full
  * at breakfast; left unfed altogether, it goes hungry in about a day.
@@ -320,7 +324,7 @@ export const FIELD_EXPANSIONS = [
   { cost: 400, level: 3, plots: 4 },
 ] as const;
 
-export type FacilityId = 'barn' | 'pond' | 'tank';
+export type FacilityId = 'barn' | 'coop' | 'pond' | 'tank';
 
 export type Facility = {
   id: FacilityId;
@@ -336,6 +340,10 @@ export const FACILITIES: Record<FacilityId, Facility> = {
   barn: {
     id: 'barn', name: 'Ahır', unit: 'hayvan', base: BARN_CAPACITY,
     steps: [{ cost: 300, level: 2, capacity: 60 }, { cost: 800, level: 4, capacity: 80 }],
+  },
+  coop: {
+    id: 'coop', name: 'Kümes', unit: 'tavuk', base: COOP_CAPACITY,
+    steps: [{ cost: 200, level: 2, capacity: 35 }, { cost: 500, level: 4, capacity: 50 }],
   },
   pond: {
     id: 'pond', name: 'Balık havuzu', unit: 'balık', base: POND_CAPACITY,

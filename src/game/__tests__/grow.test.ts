@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BASE_AREA, BASE_PLOTS, FACILITIES, FIELD_EXPANSIONS, FIELDS, LAND_AREA, LAND_USES, LEVELS } from '../data';
 import {
   barnCapacity,
+  coopCapacity,
   farmArea,
   fieldLevel,
   initialState,
@@ -103,12 +104,24 @@ describe('buildings', () => {
   });
 
   it('a bigger barn takes more animals', () => {
-    start({ coins: RICH, xp: MAX_XP, animals: Array.from({ length: FACILITIES.barn.base }, () => animal('chicken')) });
-    S().buyAnimal('chicken');
+    start({ coins: RICH, xp: MAX_XP, animals: Array.from({ length: FACILITIES.barn.base }, () => animal('cow')) });
+    S().buyAnimal('cow');
     expect(S().animals).toHaveLength(FACILITIES.barn.base);
     S().upgrade('barn');
-    S().buyAnimal('chicken');
+    S().buyAnimal('cow');
     expect(S().animals).toHaveLength(FACILITIES.barn.base + 1);
+  });
+
+  it('a bigger coop takes more hens, and so does land made a coop', () => {
+    start({ coins: RICH, xp: MAX_XP, animals: Array.from({ length: FACILITIES.coop.base }, () => animal('chicken')) });
+    S().buyAnimal('chicken');
+    expect(S().animals).toHaveLength(FACILITIES.coop.base);
+    S().upgrade('coop');
+    expect(coopCapacity(S())).toBe(FACILITIES.coop.steps[0].capacity);
+    S().buyLand('east', 'coop');
+    expect(coopCapacity(S())).toBe(FACILITIES.coop.steps[0].capacity + LAND_USES.coop.adds);
+    S().buyAnimal('chicken');
+    expect(S().animals).toHaveLength(FACILITIES.coop.base + 1);
   });
 
   it('a bigger pond takes more fish', () => {
@@ -267,7 +280,7 @@ describe('what the land is for', () => {
   it('a barn or pond cannot be taken away while the animals or fish would not fit', () => {
     rich();
     S().buyLand('east', 'barn');
-    useGame.setState({ animals: Array.from({ length: barnCapacity(S()) }, () => animal('chicken')) });
+    useGame.setState({ animals: Array.from({ length: barnCapacity(S()) }, () => animal('cow')) });
     S().convertLand('east', 'field');
     expect(S().land.east).toBe('barn');
     expect(S().events[0].text).toBe(`Hayvanlar kalan ahıra sığmaz: önce ${LAND_USES.barn.adds} hayvan sat.`);
@@ -312,8 +325,8 @@ describe('the farm', () => {
   it('a version-2 save loads as it was built', () => {
     const v2 = { ...initialState(T0), version: 2, upgrades: undefined };
     const s = migrate(v2, 2);
-    expect(s.version).toBe(7);
-    expect(s.upgrades).toEqual({ barn: 0, pond: 0, tank: 0 });
+    expect(s.version).toBe(8);
+    expect(s.upgrades).toEqual({ barn: 0, coop: 0, pond: 0, tank: 0 });
     expect(barnCapacity(s)).toBe(FACILITIES.barn.base);
   });
 });

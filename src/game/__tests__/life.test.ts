@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { dayOf } from '../clock';
-import { BARN_CAPACITY, HATCH_HOURS, POND_CAPACITY, SICK_DEATH_HOURS, SPECIES } from '../data';
+import { BARN_CAPACITY, COOP_CAPACITY, HATCH_HOURS, POND_CAPACITY, SICK_DEATH_HOURS, SPECIES } from '../data';
 import { animalValue, dueAt, initialState, isAdult, migrate, useGame, type Animal, type GameState } from '../store';
 
 /**
@@ -130,14 +130,32 @@ describe('breeding', () => {
     expect(S().incubator).toHaveLength(0);
   });
 
-  it('the incubator needs eggs and room in the barn', () => {
+  it('the incubator needs eggs and room in the coop', () => {
     start({ inventory: {}, animals: [] });
     S().incubate(6);
     expect(S().incubator).toHaveLength(0);
-    start({ inventory: { egg: 6 }, animals: Array.from({ length: BARN_CAPACITY }, () => animal('cow')) });
+    start({ inventory: { egg: 6 }, animals: Array.from({ length: COOP_CAPACITY }, () => animal('chicken')) });
     S().incubate(6);
     expect(S().incubator).toHaveLength(0);
     expect(S().inventory.egg).toBe(6);
+    expect(S().events[0].text).toBe('Kümeste civcivlere yer yok.');
+  });
+
+  it('a full barn leaves the coop free, and a full coop the barn', () => {
+    start({ inventory: { egg: 6 }, animals: Array.from({ length: BARN_CAPACITY }, () => animal('cow')) });
+    S().incubate(6);
+    expect(S().incubator).toHaveLength(1);
+    useGame.setState({ coins: 10_000, xp: 10_000 });
+    S().buyAnimal('chicken');
+    expect(S().animals.filter((a) => a.species === 'chicken')).toHaveLength(1);
+    S().buyAnimal('cow');
+    expect(S().animals.filter((a) => a.species === 'cow')).toHaveLength(BARN_CAPACITY);
+    expect(S().events[0].text).toBe('Ahırda yer kalmadı. Ahırı büyütebilirsin.');
+    start({ coins: 10_000, xp: 10_000, animals: Array.from({ length: COOP_CAPACITY }, () => animal('chicken')) });
+    S().buyAnimal('chicken');
+    expect(S().events[0].text).toBe('Kümeste yer kalmadı. Kümesi büyütebilirsin.');
+    S().buyAnimal('sheep');
+    expect(S().animals.filter((a) => a.species === 'sheep')).toHaveLength(1);
   });
 
   it('grown fish spawn in clean water when fed, within the room in the pond', () => {
@@ -257,7 +275,7 @@ describe('old saves', () => {
       incubator: undefined,
     };
     const s = migrate(v1, 1);
-    expect(s.version).toBe(7);
+    expect(s.version).toBe(8);
     expect(s.incubator).toEqual([]);
     expect(s.animals.every((a) => a.pregnantSince === null && a.sickHours === 0 && a.warnedSick === false)).toBe(true);
     expect(s.log[0]).toMatchObject({ births: 0, deaths: 0 });

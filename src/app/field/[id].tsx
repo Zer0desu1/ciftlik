@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CropArt } from '@/components/art/crops';
 import { ItemIcon } from '@/components/art/items';
+import { ConvertCard } from '@/components/land-convert';
 import { Bar, Button, Card, Chip, Pill, Row, Screen, Txt, TopBar } from '@/components/ui';
 import { CROPS, FIELD_EXPANSIONS, FIELDS, type CropId, type FieldId } from '@/game/data';
 import { plotStage, summarizeField } from '@/game/selectors';
@@ -220,6 +221,7 @@ export default function FieldScreen() {
           }}
         />
       ) : null}
+      <ConvertCard field={field} title="Bu tarlayı dönüştür" />
     </Screen>
   );
 }

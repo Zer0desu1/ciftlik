@@ -1,15 +1,17 @@
-import { Droplets, Fish, Lock, Map, Maximize2, Sprout, Warehouse } from 'lucide-react-native';
-import type { ReactNode } from 'react';
+import { Droplets, Egg, Fish, Lock, Map, Maximize2, Sprout, Warehouse } from 'lucide-react-native';
+import { useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { CoinIcon } from '@/components/art/items';
+import { ConvertCard, UseIcon } from '@/components/land-convert';
 import { Button, Card, IconBadge, Pill, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
-import { FACILITIES, FIELD_EXPANSIONS, FIELDS, LAND_AREA, type FacilityId, type FieldId } from '@/game/data';
+import { FACILITIES, FIELD_EXPANSIONS, FIELDS, LAND_AREA, LAND_USES, landName, type FacilityId, type FieldId } from '@/game/data';
 import { capacity, farmArea, fieldLevel, levelOf, ownsField, ownsLand, useGame } from '@/game/store';
 import { C, S } from '@/theme';
 
 const FACILITY_LOOK: Record<FacilityId, { icon: ReactNode; tint: string }> = {
   barn: { icon: <Warehouse size={20} color={C.rose} />, tint: C.roseSoft },
+  coop: { icon: <Egg size={20} color={C.amber} />, tint: C.amberSoft },
   pond: { icon: <Fish size={20} color={C.blue} />, tint: C.blueSoft },
   tank: { icon: <Droplets size={20} color={C.blue} />, tint: C.blueSoft },
 };
@@ -90,6 +92,36 @@ function UpgradeCard({
   );
 }
 
+/** The land owned, each with what it is now; tapping one opens its converter. */
+function MyLand() {
+  const land = useGame((s) => s.land);
+  const [open, setOpen] = useState<FieldId | null>(null);
+  return (
+    <>
+      {FIELDS.filter((f) => land[f.id]).map((f) => {
+        const use = land[f.id]!;
+        return open === f.id ? (
+          <View key={f.id} style={{ gap: S.sm }}>
+            <ConvertCard field={f.id} title={landName(f, use)} />
+            <Button small kind="ghost" label="Kapat" onPress={() => setOpen(null)} />
+          </View>
+        ) : (
+          <Card key={f.id} onPress={() => setOpen(f.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, padding: S.md }}>
+            <IconBadge tint={use === 'empty' ? C.amberSoft : C.greenSoft} size={38}>
+              <UseIcon use={use} color={use === 'empty' ? C.amber : C.green} />
+            </IconBadge>
+            <View style={{ flex: 1 }}>
+              <Txt v="label">{landName(f, use)}</Txt>
+              <Txt v="caption">{LAND_USES[use].name}</Txt>
+            </View>
+            <Pill text="Dönüştür" tone={use === 'empty' ? 'amber' : 'muted'} />
+          </Card>
+        );
+      })}
+    </>
+  );
+}
+
 export default function UpgradesScreen() {
   const state = useGame();
   const { expandField, upgrade, buyLand } = useGame.getState();
@@ -106,6 +138,9 @@ export default function UpgradesScreen() {
           Her büyütme çiftliğine arazi ve 10 XP katar. Bazı adımlar için seviye gerekir.
         </Txt>
       </Card>
+
+      <SectionHeader title="Arazilerim" subtitle="Dokun, ne olacağını seç: tarla, ahır, balık havuzu, su deposu, güneş tarlası" />
+      <MyLand />
 
       <SectionHeader title="Arazi" subtitle="Boş gelir; haritada araziye dokunup tarla, ahır, havuz, su deposu ya da güneş tarlası yap" />
       {FIELDS.filter((f) => f.land && !ownsLand(state, f.id)).map((f) => (

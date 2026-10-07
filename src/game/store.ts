@@ -117,7 +117,7 @@ export type Power = {
 export type FarmEvent = { id: number; at: number; text: string; tone: 'good' | 'bad' | 'info' };
 
 export type GameState = {
-  version: 7;
+  version: 8;
   farmName: string;
   /** Game time, in minutes since day 1, 00:00. */
   minutes: number;
@@ -317,7 +317,7 @@ export function initialState(now = Date.now()): GameState {
   };
   const land: GameState['land'] = { tomatoes: 'field', vegetables: 'field', corn: 'field' };
   return {
-    version: 7,
+    version: 8,
     farmName: 'Yeşil Vadi Çiftliği',
     land,
     power: { panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] },
@@ -341,7 +341,7 @@ export function initialState(now = Date.now()): GameState {
       fullness: 70,
     },
     incubator: [],
-    upgrades: { barn: 0, pond: 0, tank: 0 },
+    upgrades: { barn: 0, coop: 0, pond: 0, tank: 0 },
     machines: {},
     warned: {},
     tank: 720,
@@ -730,7 +730,7 @@ function simulate(d: Draft, hours: number) {
         a.fullness > 50 &&
         a.health > 70 &&
         adultsOf(a.species) >= 2 &&
-        d.animals.length + expecting < barnCapacity(d) &&
+        inBarn(d) + expecting < barnCapacity(d) &&
         Math.random() < s.conceiveChance * (a.happiness > 60 ? 1.3 : 1) * dt
       ) {
         a.pregnantSince = d.minutes;
@@ -747,14 +747,14 @@ function simulate(d: Draft, hours: number) {
     // Incubator
     d.incubator = d.incubator.filter((tray) => {
       if (d.minutes < tray.readyAt) return true;
-      const room = barnCapacity(d) - d.animals.length;
+      const room = coopCapacity(d) - inCoop(d);
       const chicks = Math.min(tray.eggs, room);
       for (let i = 0; i < chicks; i++) d.animals.push(makeYoung('chicken', d.nextId++, day, SPECIES.chicken.breeds[0], d.animals));
       if (chicks) {
         ensureDay(d, day).births += chicks;
         note(d, `Kuluçkadan ${chicks} civciv çıktı!`, 'good');
       } else {
-        note(d, 'Ahır dolu olduğu için yumurtalar çıkamadı.', 'bad');
+        note(d, 'Kümes dolu olduğu için yumurtalar çıkamadı.', 'bad');
       }
       return false;
     });
@@ -978,7 +978,9 @@ export const useGame = create<Store>()(
         update(set, (d) => {
           const s = SPECIES[species];
           if (s.level > levelOf(d.xp)) return note(d, `${s.name} için seviye ${s.level} gerekli.`, 'bad');
-          if (d.animals.length >= barnCapacity(d)) return note(d, 'Ahırda yer kalmadı. Ahırı büyütebilirsin.', 'bad');
+          if (species === 'chicken' ? inCoop(d) + eggsIn(d) >= coopCapacity(d) : inBarn(d) >= barnCapacity(d)) {
+            return note(d, species === 'chicken' ? 'Kümeste yer kalmadı. Kümesi büyütebilirsin.' : 'Ahırda yer kalmadı. Ahırı büyütebilirsin.', 'bad');
+          }
           if (d.coins < s.price) return note(d, 'Yeterli paran yok.', 'bad');
           d.coins -= s.price;
           ensureDay(d, dayOf(d.minutes)).expense += s.price;
@@ -992,9 +994,9 @@ export const useGame = create<Store>()(
       incubate: (eggs) =>
         update(set, (d) => {
           if (d.incubator.length >= 3) return note(d, 'Kuluçka makinesinde boş tepsi yok.', 'bad');
-          const room = barnCapacity(d) - d.animals.length - d.incubator.reduce((n, t) => n + t.eggs, 0);
+          const room = coopCapacity(d) - inCoop(d) - eggsIn(d);
           const n = Math.min(eggs, INCUBATOR_SIZE, room, d.inventory.egg ?? 0);
-          if (n <= 0) return note(d, room <= 0 ? 'Ahırda civcivlere yer yok.' : 'Kuluçkaya koyacak yumurta yok.', 'bad');
+          if (n <= 0) return note(d, room <= 0 ? 'Kümeste civcivlere yer yok.' : 'Kuluçkaya koyacak yumurta yok.', 'bad');
           takeItem(d, 'egg', n);
           d.incubator.push({ id: `tray-${d.nextId++}`, eggs: n, readyAt: d.minutes + HATCH_HOURS * 60 });
           gainXp(d, 1);
@@ -1076,8 +1078,13 @@ export const useGame = create<Store>()(
           if (growing && !destroy) return note(d, `${def.name} üzerinde ${growing} ekin var: hasat et ya da tarlayı boz.`, 'bad');
           if (from === 'barn') {
             const left = barnCapacity(d) - LAND_USES.barn.adds;
-            const herd = d.animals.length + d.incubator.reduce((n, t) => n + t.eggs, 0);
+            const herd = inBarn(d);
             if (herd > left) return note(d, `Hayvanlar kalan ahıra sığmaz: önce ${herd - left} hayvan sat.`, 'bad');
+          }
+          if (from === 'coop') {
+            const left = coopCapacity(d) - LAND_USES.coop.adds;
+            const hens = inCoop(d) + eggsIn(d);
+            if (hens > left) return note(d, `Tavuklar kalan kümese sığmaz: önce ${hens - left} tavuk sat.`, 'bad');
           }
           if (from === 'pond') {
             const left = pondCapacity(d) - LAND_USES.pond.adds;
@@ -1259,7 +1266,7 @@ export const useGame = create<Store>()(
     }),
     {
       name: 'ciftlik-save',
-      version: 7,
+      version: 8,
       migrate: (persisted, version) => migrate(persisted, version),
       storage: createJSONStorage(() => AsyncStorage),
       // Only data is saved; the actions are rebuilt on load.
@@ -1334,6 +1341,11 @@ export function capacity(s: GameState, facility: FacilityId): number {
 
 // The buildings, plus whatever land has been given over to more of them.
 export const barnCapacity = (s: GameState) => capacity(s, 'barn') + landCount(s, 'barn') * LAND_USES.barn.adds;
+export const coopCapacity = (s: GameState) => capacity(s, 'coop') + landCount(s, 'coop') * LAND_USES.coop.adds;
+/** Cows, sheep and goats live in the barn; hens in the coop. */
+export const inBarn = (s: GameState) => s.animals.filter((a) => a.species !== 'chicken').length;
+export const inCoop = (s: GameState) => s.animals.filter((a) => a.species === 'chicken').length;
+const eggsIn = (s: GameState) => s.incubator.reduce((n, t) => n + t.eggs, 0);
 export const pondCapacity = (s: GameState) => capacity(s, 'pond') + landCount(s, 'pond') * LAND_USES.pond.adds;
 export const tankCapacity = (s: GameState) => capacity(s, 'tank') + landCount(s, 'tank') * LAND_USES.tank.adds;
 
@@ -1358,7 +1370,7 @@ export function migrate(persisted: unknown, version: number): GameState {
   }
   if (version < 3) {
     // Version 2 farms were all as built: base buildings, eight plots a field.
-    s.upgrades = { barn: 0, pond: 0, tank: 0 };
+    s.upgrades = { barn: 0, coop: 0, pond: 0, tank: 0 };
   }
   if (version < 4) {
     s.machines = {};
@@ -1370,7 +1382,9 @@ export function migrate(persisted: unknown, version: number): GameState {
   if (version < 6) s.land = Object.fromEntries(FIELDS.filter((f) => s.fields[f.id].length).map((f) => [f.id, 'field']));
   // Version 7 brings electricity: nothing built yet, the meter at zero.
   s.power ??= { panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] };
-  s.version = 7;
+  // Version 8 keeps the hens apart, in a coop of their own, built at its first size.
+  s.upgrades = { ...s.upgrades, coop: s.upgrades.coop ?? 0 };
+  s.version = 8;
   return s;
 }
 

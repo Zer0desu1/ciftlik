@@ -37,12 +37,11 @@ function areaOn(f: FieldId, use: LandUse): Rect {
     const ry = z.h / 2 - 22;
     return { x: z.x + z.w / 2 - rx * 0.6, y: z.y + z.h / 2 + 10 - ry * 0.55, w: rx * 1.2, h: ry * 1.1 };
   }
-  if (use === 'barn') return { x: z.x + 50, y: z.y + 30, w: z.w - 60, h: z.h - 40 };
+  if (use === 'barn' || use === 'coop') return { x: z.x + 50, y: z.y + 30, w: z.w - 60, h: z.h - 40 };
   return { x: z.x + 8, y: z.y + 30, w: z.w - 16, h: z.h - 38 };
 }
 // Stable arrays, so a Wanderer's effect doesn't restart on every render.
 const PEN_AREAS = [PEN];
-const COOP_AREAS = [COOP];
 const SPOT: Partial<Record<MachineId, { x: number; y: number }>> = {
   feeder: { x: 150, y: 262 },
   fish_feeder: { x: 278, y: 252 },
@@ -176,10 +175,15 @@ export function MapLife({ state, view, land }: { state: GameState; view: View_; 
   const day = dayOf(state.minutes);
   // `land` is "id:use,id:use": what each owned piece of land is. Each area is
   // its own stable array, so a Wanderer's effect doesn't restart on every render.
-  const { fieldAreas, pens, ponds } = useMemo(() => {
+  const { fieldAreas, pens, coops, ponds } = useMemo(() => {
     const parts = land ? land.split(',').map((p) => p.split(':') as [FieldId, LandUse]) : [];
     const on = (use: LandUse) => parts.filter(([, u]) => u === use).map(([f]) => areaOn(f, use));
-    return { fieldAreas: on('field'), pens: [PEN, ...on('barn')].map((a) => [a]), ponds: [POND, ...on('pond')].map((a) => [a]) };
+    return {
+      fieldAreas: on('field'),
+      pens: [PEN, ...on('barn')].map((a) => [a]),
+      coops: [COOP, ...on('coop')].map((a) => [a]),
+      ponds: [POND, ...on('pond')].map((a) => [a]),
+    };
   }, [land]);
   const herd: ReactNode[] = [];
 
@@ -187,7 +191,8 @@ export function MapLife({ state, view, land }: { state: GameState; view: View_; 
     const all = state.animals.filter((a) => a.species === sp);
     const young = all.filter((a) => !isAdult(a, day));
     // More pasture, more of the herd on show; each animal keeps to one pen.
-    const shown = Math.min(all.length, SHOW[sp] * (sp === 'chicken' ? 1 : pens.length));
+    const homes = sp === 'chicken' ? coops : pens;
+    const shown = Math.min(all.length, SHOW[sp] * homes.length);
     // Keep the young in proportion: a herd half calves shows half calves.
     const youngShown = Math.min(young.length, Math.round((young.length / Math.max(all.length, 1)) * shown));
     for (let i = 0; i < shown; i++) {
@@ -196,7 +201,7 @@ export function MapLife({ state, view, land }: { state: GameState; view: View_; 
       herd.push(
         <Wanderer
           key={`${sp}-${i}-${isYoung}`}
-          areas={sp === 'chicken' ? COOP_AREAS : pens[i % pens.length]}
+          areas={homes[i % homes.length]}
           view={view}
           size={size}
           speed={sp === 'chicken' ? 14 : 6}>
