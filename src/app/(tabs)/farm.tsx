@@ -1,33 +1,59 @@
 import { router, type Href } from 'expo-router';
-import { ArrowRight, Bot, Droplets, Fish, Hand, Home, Map, Maximize2, Package, PawPrint, Sprout, Wheat } from 'lucide-react-native';
+import { ArrowRight, Bot, Droplets, Fish, Hand, Home, Lock, Map, Maximize2, Package, PawPrint, Sprout, Wheat } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { WeatherIcon } from '@/components/art/weather';
-import { FarmMap, ZONES, type ZoneId } from '@/components/farm-map';
+import { FarmMap, type ZoneId } from '@/components/farm-map';
+import { CoinIcon } from '@/components/art/items';
 import { Button, Card, Chip, IconBadge, Meter, Row, SectionHeader, Txt } from '@/components/ui';
 import { dayOf, hourOf, isNight, weatherFor } from '@/game/clock';
-import { CROPS, FIELDS, SPECIES, type FieldId, type SpeciesId } from '@/game/data';
+import { BASE_PLOTS, CROPS, FIELDS, LAND_AREA, SPECIES, type FieldId, type SpeciesId } from '@/game/data';
 import { fishCount, herdOf, inventoryValue, plantedCount, summarizeField } from '@/game/selectors';
-import { barnCapacity, farmArea, levelProgress, tankCapacity, useGame, type GameState } from '@/game/store';
+import { barnCapacity, farmArea, levelOf, levelProgress, ownedFields, ownsField, tankCapacity, useGame, type GameState } from '@/game/store';
 import { C, S } from '@/theme';
 
-const ORDER: (ZoneId | null)[] = [null, 'house', 'tomatoes', 'vegetables', 'corn', 'animals', 'water', 'storage'];
-
-const CHIP_LABEL: Record<ZoneId, string> = {
+const CHIP_LABEL = {
   house: 'Çiftlik Evi',
-  tomatoes: 'Domates Tarlası',
-  vegetables: 'Sebze Bahçesi',
-  corn: 'Mısır Tarlası',
   animals: 'Hayvanlar',
   water: 'Su & Havuz',
   storage: 'Ambar',
-};
+  ...Object.fromEntries(FIELDS.map((f) => [f.id, f.name])),
+} as Record<ZoneId, string>;
 
-const isField = (z: ZoneId): z is FieldId => z === 'tomatoes' || z === 'vegetables' || z === 'corn';
+const isField = (z: ZoneId): z is FieldId => FIELDS.some((f) => f.id === z);
+
+/** Land around the farm not bought yet: what it costs and what it brings. */
+function LandCard({ field, state }: { field: FieldId; state: GameState }) {
+  const def = FIELDS.find((f) => f.id === field)!;
+  const land = def.land!;
+  const locked = land.level > levelOf(state.xp);
+  const { buyLand } = useGame.getState();
+  return (
+    <Card style={{ gap: S.md }}>
+      <Row>
+        <IconBadge tint={C.amberSoft}>{locked ? <Lock size={20} color={C.amber} /> : <Map size={20} color={C.amber} />}</IconBadge>
+        <View style={{ flex: 1 }}>
+          <Txt v="heading">{def.name}</Txt>
+          <Txt v="caption">Satılık arazi · +{LAND_AREA.toLocaleString('tr-TR')} dönüm</Txt>
+        </View>
+      </Row>
+      <Txt v="body">
+        Satın alınca {BASE_PLOTS} parsellik yeni bir tarla olur. {def.suggested.map((c) => CROPS[c].name).join(' ve ')} için çok uygun.
+      </Txt>
+      <Button
+        label={locked ? `Seviye ${land.level} gerekli` : `Satın al · ${land.price} altın`}
+        icon={locked ? <Lock size={16} color={C.white} /> : <CoinIcon size={16} />}
+        onPress={() => buyLand(field)}
+        disabled={locked || state.coins < land.price}
+      />
+    </Card>
+  );
+}
 
 function ZoneCard({ zone, state }: { zone: ZoneId; state: GameState }) {
+  if (isField(zone) && !ownsField(state, zone)) return <LandCard field={zone} state={state} />;
   let icon: ReactNode;
   let tint: string;
   let title = CHIP_LABEL[zone];
@@ -153,6 +179,8 @@ export default function FarmScreen() {
   const [zone, setZone] = useState<ZoneId | null>(null);
   const weather = weatherFor(dayOf(state.minutes));
   const mapSize = Math.min(width, 520) - S.xl * 2 - S.md * 2;
+  const order: (ZoneId | null)[] = [null, 'house', ...ownedFields(state).map((f) => f.id), 'animals', 'water', 'storage'];
+  const forSale = FIELDS.filter((f) => f.land && !ownsField(state, f.id)).length;
 
   return (
     <View style={{ flex: 1, backgroundColor: C.page }}>
@@ -168,7 +196,7 @@ export default function FarmScreen() {
         </Row>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: S.xl, gap: S.sm, paddingVertical: 4 }}>
-          {ORDER.map((z) => (
+          {order.map((z) => (
             <Chip
               key={z ?? 'all'}
               label={z ? CHIP_LABEL[z] : 'Genel Bakış'}
@@ -190,9 +218,10 @@ export default function FarmScreen() {
             <Card tint={C.greenSoft} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
               <Hand size={22} color={C.green} />
               <View style={{ flex: 1 }}>
-                <Txt v="label">Keşfetmek için bir bölgeye dokun</Txt>
+                <Txt v="label">Bir bölgeye dokun, haritayı sürükle ya da yakınlaştır</Txt>
                 <Txt v="caption">
-                  {Object.keys(ZONES).length} bölge · {plantedCount(state)} ekili parsel · {state.animals.length} hayvan
+                  {plantedCount(state)} ekili parsel · {state.animals.length} hayvan
+                  {forSale ? ` · ${forSale} satılık arazi` : ''}
                 </Txt>
               </View>
             </Card>
@@ -213,7 +242,7 @@ export default function FarmScreen() {
             </IconBadge>
             <View style={{ flex: 1 }}>
               <Txt v="label">Çiftliği büyüt</Txt>
-              <Txt v="caption">Tarlaları genişlet, ahırı, havuzu ve su deposunu büyüt</Txt>
+              <Txt v="caption">Yeni arazi al, tarlaları genişlet, binaları büyüt</Txt>
             </View>
             <ArrowRight size={18} color={C.amber} />
           </Card>

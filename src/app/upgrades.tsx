@@ -1,11 +1,11 @@
-import { Droplets, Fish, Lock, Maximize2, Sprout, Warehouse } from 'lucide-react-native';
+import { Droplets, Fish, Lock, Map, Maximize2, Sprout, Warehouse } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { CoinIcon } from '@/components/art/items';
 import { Button, Card, IconBadge, Pill, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
-import { FACILITIES, FIELD_EXPANSIONS, FIELDS, type FacilityId, type FieldId } from '@/game/data';
-import { capacity, farmArea, fieldLevel, levelOf, useGame } from '@/game/store';
+import { BASE_PLOTS, FACILITIES, FIELD_EXPANSIONS, FIELDS, LAND_AREA, type FacilityId, type FieldId } from '@/game/data';
+import { capacity, farmArea, fieldLevel, levelOf, ownsField, useGame } from '@/game/store';
 import { C, S } from '@/theme';
 
 const FACILITY_LOOK: Record<FacilityId, { icon: ReactNode; tint: string }> = {
@@ -39,6 +39,7 @@ function UpgradeCard({
   total,
   step,
   onPress,
+  action = 'Büyüt',
 }: {
   icon: ReactNode;
   tint: string;
@@ -49,6 +50,7 @@ function UpgradeCard({
   total: number;
   step: { cost: number; level: number } | undefined;
   onPress: () => void;
+  action?: string;
 }) {
   const coins = useGame((s) => s.coins);
   const level = levelOf(useGame((s) => s.xp));
@@ -75,7 +77,7 @@ function UpgradeCard({
           </View>
           <Button
             small
-            label={locked ? 'Kilitli' : 'Büyüt'}
+            label={locked ? 'Kilitli' : action}
             icon={locked ? <Lock size={14} color={C.white} /> : <Maximize2 size={14} color={C.white} />}
             onPress={onPress}
             disabled={locked || coins < step.cost}
@@ -90,7 +92,7 @@ function UpgradeCard({
 
 export default function UpgradesScreen() {
   const state = useGame();
-  const { expandField, upgrade } = useGame.getState();
+  const { expandField, upgrade, buyLand } = useGame.getState();
 
   return (
     <Screen bottomGap={40} header={<TopBar title="Çiftliği Büyüt" subtitle={`${farmArea(state).toLocaleString('tr-TR')} dönüm`} />}>
@@ -105,8 +107,30 @@ export default function UpgradesScreen() {
         </Txt>
       </Card>
 
+      <SectionHeader title="Arazi" subtitle={`Her parsel ${BASE_PLOTS} parsellik yeni bir tarla ve haritada yeni bir alan`} />
+      {FIELDS.filter((f) => f.land && !ownsField(state, f.id)).map((f) => (
+        <UpgradeCard
+          key={f.id}
+          icon={<Map size={20} color={C.amber} />}
+          tint={C.amberSoft}
+          title={f.name}
+          now="Satılık arazi"
+          next={`${BASE_PLOTS} parsellik tarla · +${LAND_AREA.toLocaleString('tr-TR')} dönüm`}
+          done={0}
+          total={1}
+          step={{ cost: f.land!.price, level: f.land!.level }}
+          onPress={() => buyLand(f.id)}
+          action="Satın al"
+        />
+      ))}
+      {FIELDS.every((f) => !f.land || ownsField(state, f.id)) ? (
+        <Card>
+          <Txt v="body">Çevredeki bütün araziyi aldın.</Txt>
+        </Card>
+      ) : null}
+
       <SectionHeader title="Tarlalar" subtitle="Her genişletme dört yeni parsel ekler" />
-      {FIELDS.map((f) => {
+      {FIELDS.filter((f) => ownsField(state, f.id)).map((f) => {
         const id: FieldId = f.id;
         const lvl = fieldLevel(state, id);
         const step = FIELD_EXPANSIONS[lvl];

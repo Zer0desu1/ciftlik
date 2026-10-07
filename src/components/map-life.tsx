@@ -1,26 +1,36 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, Easing, View } from 'react-native';
 
-import { AnimalArt } from '@/components/art/animals';
+import { AnimalArt, FishArt } from '@/components/art/animals';
 import { RobotSprite } from '@/components/art/machines';
 import { dayOf } from '@/game/clock';
-import { MACHINES, type MachineId, type SpeciesId } from '@/game/data';
+import { MACHINES, type FieldId, type MachineId, type SpeciesId } from '@/game/data';
 import { isAdult, type GameState } from '@/game/store';
 
 type Rect = { x: number; y: number; w: number; h: number };
 type View_ = { x: number; y: number; scale: number };
 
-/** Where things live on the map, in its own 360×360 space (see ZONES in farm-map). */
+/** Where things live on the map, in its own units (see ZONES in farm-map). */
 const PEN: Rect = { x: 60, y: 264, w: 116, h: 80 };
 const COOP: Rect = { x: 16, y: 300, w: 46, h: 44 };
-const FIELD_AREAS: Rect[] = [
-  { x: 128, y: 38, w: 216, h: 66 },
-  { x: 16, y: 150, w: 88, h: 66 },
-  { x: 128, y: 150, w: 216, h: 66 },
-];
+/** Inside the pond's oval, so a fish never swims onto the grass. */
+const POND: Rect = { x: 268, y: 266, w: 66, h: 21 };
+/** Each field's planted area, where the field robots work. */
+const FIELD_AREA: Record<FieldId, Rect> = {
+  tomatoes: { x: 128, y: 38, w: 216, h: 66 },
+  vegetables: { x: 16, y: 150, w: 88, h: 66 },
+  corn: { x: 128, y: 150, w: 216, h: 66 },
+  east: { x: 376, y: 38, w: 168, h: 66 },
+  orchard: { x: 376, y: 150, w: 168, h: 66 },
+  meadow: { x: 376, y: 262, w: 168, h: 82 },
+  south: { x: 16, y: 398, w: 160, h: 66 },
+  creek: { x: 200, y: 398, w: 144, h: 66 },
+  far: { x: 376, y: 398, w: 168, h: 66 },
+};
 // Stable arrays, so a Wanderer's effect doesn't restart on every render.
 const PEN_AREAS = [PEN];
 const COOP_AREAS = [COOP];
+const POND_AREAS = [POND];
 const SPOT: Partial<Record<MachineId, { x: number; y: number }>> = {
   feeder: { x: 150, y: 262 },
   fish_feeder: { x: 278, y: 252 },
@@ -150,8 +160,11 @@ function Bobber({ at, view, size, children }: { at: { x: number; y: number }; vi
  * about the coop, and whatever machines are running going about their chores.
  * Drawn above the map and below nothing - it takes no touches.
  */
-export function MapLife({ state, view }: { state: GameState; view: View_ }) {
+export function MapLife({ state, view, fields }: { state: GameState; view: View_; fields: FieldId[] }) {
   const day = dayOf(state.minutes);
+  const fieldKey = fields.join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fieldAreas = useMemo(() => fields.map((f) => FIELD_AREA[f]), [fieldKey]);
   const herd: ReactNode[] = [];
 
   (['cow', 'sheep', 'goat', 'chicken'] as SpeciesId[]).forEach((sp) => {
@@ -176,12 +189,27 @@ export function MapLife({ state, view }: { state: GameState; view: View_ }) {
     }
   });
 
+  // Fish in the pond, up to six, in proportion to what swims there.
+  const fish: ReactNode[] = [];
+  const total = state.pond.batches.reduce((n, b) => n + b.count, 0);
+  state.pond.batches.forEach((b) => {
+    const n = Math.max(1, Math.round((b.count / total) * Math.min(total, 6)));
+    for (let i = 0; i < n && fish.length < 6; i++) {
+      const size = b.growth >= 1 ? 11 : 8;
+      fish.push(
+        <Wanderer key={`${b.id}-${i}`} areas={POND_AREAS} view={view} size={size} speed={9}>
+          <FishArt species={b.species} size={size * view.scale} />
+        </Wanderer>,
+      );
+    }
+  });
+
   const robots: ReactNode[] = [];
   (Object.keys(MACHINES) as MachineId[]).forEach((id) => {
     if (!state.machines[id]?.on) return;
     const zone = MACHINES[id].zone;
     if (id === 'sprinkler') {
-      FIELD_AREAS.forEach((f, i) =>
+      fieldAreas.forEach((f, i) =>
         robots.push(
           <Bobber key={`spr-${i}`} at={{ x: f.x + f.w / 2, y: f.y + f.h / 2 }} view={view} size={16}>
             <RobotSprite id="sprinkler" size={16 * view.scale} />
@@ -196,7 +224,7 @@ export function MapLife({ state, view }: { state: GameState; view: View_ }) {
       );
     } else {
       robots.push(
-        <Wanderer key={id} areas={zone === 'fields' ? FIELD_AREAS : PEN_AREAS} view={view} size={20} speed={16} faceLeft={false}>
+        <Wanderer key={id} areas={zone === 'fields' ? fieldAreas : PEN_AREAS} view={view} size={20} speed={16} faceLeft={false}>
           <RobotSprite id={id} size={20 * view.scale} />
         </Wanderer>,
       );
@@ -205,6 +233,7 @@ export function MapLife({ state, view }: { state: GameState; view: View_ }) {
 
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}>
+      {fish}
       {herd}
       {robots}
     </View>

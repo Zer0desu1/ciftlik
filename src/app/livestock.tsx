@@ -1,15 +1,16 @@
 import { router } from 'expo-router';
-import { Check, ChevronRight, Egg, Heart, PackageOpen, Plus, Sparkles, Utensils, Wheat } from 'lucide-react-native';
+import { Check, ChevronRight, Egg, HandHeart, Heart, PackageOpen, Pill as PillIcon, Plus, Sparkles, Tag, Utensils, Wheat } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimalArt } from '@/components/art/animals';
-import { ItemIcon } from '@/components/art/items';
-import { Bar, Button, Card, IconBadge, Pill, Ring, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
+import { CoinIcon, ItemIcon } from '@/components/art/items';
+import { Bar, Button, Card, Chip, IconBadge, Pill, Ring, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
 import { dayOf, hourOf } from '@/game/clock';
 import { HATCH_HOURS, INCUBATOR_SIZE, ITEMS, MEALS, SPECIES, type SpeciesId } from '@/game/data';
 import { herdOf, productReady } from '@/game/selectors';
-import { barnCapacity, currentMeal, dueAt, isAdult, isOld, levelOf, useGame, type Animal } from '@/game/store';
+import { animalValue, barnCapacity, currentMeal, dueAt, isAdult, isOld, levelOf, useGame, type Animal } from '@/game/store';
 import { C, F, R, S } from '@/theme';
 
 /** "İnekler" → "İnekleri", "Tavuklar" → "Tavukları": the plural's last vowel picks the ending. */
@@ -115,9 +116,74 @@ function FeedingTimeline() {
   );
 }
 
+/**
+ * What to do with the animals picked in select mode. Selling asks once more,
+ * since a sold animal does not come back.
+ */
+function SelectionBar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const insets = useSafeAreaInsets();
+  const animals = useGame((s) => s.animals);
+  const day = useGame((s) => dayOf(s.minutes));
+  const medicine = useGame((s) => s.inventory.medicine ?? 0);
+  const [confirm, setConfirm] = useState(false);
+  const picked = animals.filter((a) => ids.includes(a.id));
+  const value = picked.reduce((n, a) => n + animalValue(a, day), 0);
+  const ill = picked.filter((a) => a.health < 95).length;
+  const { petMany, healMany, sellAnimals } = useGame.getState();
+
+  return (
+    <View style={[styles.bar, { paddingBottom: insets.bottom + S.md }]}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Txt v="label">{picked.length} hayvan seçili</Txt>
+        <Row gap={4}>
+          <Txt v="caption">değeri</Txt>
+          <CoinIcon size={13} />
+          <Txt v="label">{value}</Txt>
+        </Row>
+      </Row>
+      {confirm ? (
+        <Row gap={S.sm}>
+          <Button kind="ghost" label="Vazgeç" onPress={() => setConfirm(false)} style={{ flex: 1 }} />
+          <Button
+            kind="danger"
+            label={`${picked.length} hayvanı ${value} altına sat`}
+            onPress={() => {
+              sellAnimals(picked.map((a) => a.id));
+              setConfirm(false);
+              onDone();
+            }}
+            style={{ flex: 2 }}
+          />
+        </Row>
+      ) : (
+        <Row gap={S.sm}>
+          <Button small kind="soft" label="Sev" icon={<HandHeart size={14} color={C.green} />} onPress={() => petMany(picked.map((a) => a.id))} style={{ flex: 1 }} />
+          <Button
+            small
+            kind="soft"
+            label={`İlaç (${medicine})`}
+            icon={<PillIcon size={14} color={C.green} />}
+            onPress={() => healMany(picked.map((a) => a.id))}
+            disabled={!ill || !medicine}
+            style={{ flex: 1 }}
+          />
+          <Button small kind="danger" label="Sat" icon={<Tag size={14} color={C.rose} />} onPress={() => setConfirm(true)} style={{ flex: 1 }} />
+        </Row>
+      )}
+    </View>
+  );
+}
+
 export default function LivestockScreen() {
   const state = useGame();
   const [species, setSpecies] = useState<SpeciesId>('cow');
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const day = dayOf(state.minutes);
+  // Animals sold or dead drop out of the selection on their own.
+  const pickedIds = picked.filter((id) => state.animals.some((a) => a.id === id));
+  const toggle = (id: string) => setPicked((old) => (old.includes(id) ? old.filter((x) => x !== id) : [...old, id]));
+  const pickWhere = (test: (a: Animal) => boolean) => setPicked(herdOf(state, species).filter(test).map((a) => a.id));
   const herd = herdOf(state, species);
   const sp = SPECIES[species];
   const ready = productReady(state, species);
@@ -125,7 +191,8 @@ export default function LivestockScreen() {
   const { feedSpecies, collect, cleanBarn, buyAnimal } = useGame.getState();
 
   return (
-    <Screen bottomGap={40} header={<TopBar title="Hayvanlar" subtitle={state.farmName} />}>
+    <>
+    <Screen bottomGap={pickedIds.length ? 170 : 40} header={<TopBar title="Hayvanlar" subtitle={state.farmName} />}>
       <Card style={{ gap: S.lg }}>
         <Row style={{ justifyContent: 'space-between' }}>
           <View>
@@ -197,18 +264,46 @@ export default function LivestockScreen() {
         title={`${sp.plural}`}
         subtitle={`${herd.length} hayvan · ${herd.filter((a) => !isAdult(a, dayOf(state.minutes))).length} yavru · ${ITEMS[sp.product].name.toLowerCase()} verir`}
         action={
-          <Button
-            small
-            kind="ghost"
-            label={sp.level > level ? `Sv. ${sp.level}` : `${sp.price} altın`}
-            icon={<Plus size={14} color={C.green} />}
-            onPress={() => buyAnimal(species)}
-            disabled={sp.level > level}
-          />
+          <Row gap={6}>
+            {!selecting ? (
+              <Button
+                small
+                kind="ghost"
+                label={sp.level > level ? `Sv. ${sp.level}` : `${sp.price} altın`}
+                icon={<Plus size={14} color={C.green} />}
+                onPress={() => buyAnimal(species)}
+                disabled={sp.level > level}
+              />
+            ) : null}
+            <Button
+              small
+              kind={selecting ? 'primary' : 'soft'}
+              label={selecting ? 'Bitti' : 'Seç'}
+              onPress={() => {
+                setSelecting(!selecting);
+                setPicked([]);
+              }}
+              disabled={!herd.length}
+            />
+          </Row>
         }
       />
-      {herd.map((a) => (
-        <Card key={a.id} onPress={() => router.push(`/animal/${a.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, padding: S.md }}>
+      {selecting ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: S.sm, paddingVertical: 2 }}>
+          <Chip label="Tümü" onPress={() => pickWhere(() => true)} />
+          <Chip label="Yaşlılar" onPress={() => pickWhere((a) => isOld(a, day))} />
+          <Chip label="Yavrular" onPress={() => pickWhere((a) => !isAdult(a, day))} />
+          <Chip label="Hastalar" onPress={() => pickWhere((a) => a.health < 60)} />
+          <Chip label="Hiçbiri" onPress={() => setPicked([])} />
+        </ScrollView>
+      ) : null}
+      {herd.map((a) => {
+        const on = pickedIds.includes(a.id);
+        return (
+        <Card
+          key={a.id}
+          onPress={() => (selecting ? toggle(a.id) : router.push(`/animal/${a.id}`))}
+          style={[{ flexDirection: 'row', alignItems: 'center', gap: S.md, padding: S.md }, on && { borderWidth: 2, borderColor: C.green }]}>
           <View style={styles.thumb}>
             <AnimalArt species={a.species} size={64} variant={a.variant} young={!isAdult(a, dayOf(state.minutes))} />
           </View>
@@ -226,10 +321,17 @@ export default function LivestockScreen() {
               <Pill {...statusPill(a, state.minutes)} />
             </Row>
           </View>
-          <ChevronRight size={18} color={C.muted} />
+          {selecting ? (
+            <View style={[styles.check, on && styles.checkOn]}>{on ? <Check size={14} color={C.white} strokeWidth={3} /> : null}</View>
+          ) : (
+            <ChevronRight size={18} color={C.muted} />
+          )}
         </Card>
-      ))}
+        );
+      })}
     </Screen>
+    {selecting && pickedIds.length ? <SelectionBar ids={pickedIds} onDone={() => setPicked([])} /> : null}
+    </>
   );
 }
 
@@ -243,4 +345,23 @@ const styles = StyleSheet.create({
   catActive: { borderColor: C.green },
   thumb: { width: 76, height: 76, borderRadius: R.md, backgroundColor: C.greenSoft, alignItems: 'center', justifyContent: 'center' },
   heart: { backgroundColor: C.greenSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: R.pill },
+  check: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
+  checkOn: { backgroundColor: C.green, borderColor: C.green },
+  bar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    gap: S.md,
+    backgroundColor: C.white,
+    paddingHorizontal: S.xl,
+    paddingTop: S.lg,
+    borderTopLeftRadius: R.xl,
+    borderTopRightRadius: R.xl,
+    shadowColor: '#3B3220',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 12,
+  },
 });

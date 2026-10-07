@@ -133,7 +133,8 @@ function SeedPicker({ field, onPick, onClose }: { field: FieldId; onPick: (crop:
 
 export default function FieldScreen() {
   const { id } = useLocalSearchParams<{ id: FieldId }>();
-  const field: FieldId = FIELDS.some((f) => f.id === id) ? id : 'tomatoes';
+  const owned = useGame((s) => FIELDS.filter((f) => s.fields[f.id]?.length).map((f) => f.id).join(','));
+  const field: FieldId = owned.split(',').includes(id) ? id : 'tomatoes';
   const plots = useGame((s) => s.fields[field]);
   const tank = useGame((s) => s.tank);
   const cap = useGame(tankCapacity);
@@ -148,7 +149,7 @@ export default function FieldScreen() {
   return (
     <Screen bottomGap={40} header={<TopBar title={def.name} subtitle={`${sum.planted} ekili · ${sum.ripe} hasada hazır`} />}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: S.sm }}>
-        {FIELDS.map((f) => (
+        {FIELDS.filter((f) => owned.split(',').includes(f.id)).map((f) => (
           <Chip key={f.id} label={f.name} active={f.id === field} onPress={() => router.setParams({ id: f.id })} />
         ))}
       </ScrollView>

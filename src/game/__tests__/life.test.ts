@@ -176,6 +176,43 @@ describe('names', () => {
   });
 });
 
+describe('selling animals', () => {
+  it('sells a chosen group at once for the sum of their values, and leaves the rest', () => {
+    const herd = [animal('cow'), animal('cow', { bornDay: 1 }), animal('sheep'), animal('goat')];
+    start({ coins: 0, animals: herd });
+    const ids = [herd[0].id, herd[1].id, herd[2].id];
+    const expected = ids.reduce((sum, id) => sum + animalValue(herd.find((a) => a.id === id)!, 1), 0);
+    S().sellAnimals([...ids, 'no-such-animal']);
+    expect(S().animals.map((a) => a.id)).toEqual([herd[3].id]);
+    expect(S().coins).toBe(expected);
+    expect(S().log.find((l) => l.day === 1)!.income).toBe(expected);
+    expect(S().events[0].text).toBe(`3 hayvan ${expected} altına satıldı.`);
+  });
+
+  it('heals the chosen sick ones, sickest first, as far as the medicine goes', () => {
+    const herd = [animal('cow', { health: 60 }), animal('cow', { health: 10 }), animal('sheep', { health: 100 }), animal('goat', { health: 30 })];
+    start({ inventory: { medicine: 2 }, animals: herd });
+    S().healMany(herd.map((a) => a.id));
+    expect(S().animals.map((a) => a.health)).toEqual([60, 100, 100, 100]);
+    expect(S().inventory.medicine).toBe(0);
+    expect(S().events[0].text).toBe('İlaç yetmedi: 2 hayvan iyileşti, 1 hayvan bekliyor.');
+  });
+
+  it('pets everyone chosen, and only them', () => {
+    const herd = [animal('cow', { happiness: 40 }), animal('cow', { happiness: 40 }), animal('sheep', { happiness: 40 })];
+    start({ animals: herd });
+    S().petMany([herd[0].id, herd[2].id]);
+    expect(S().animals.map((a) => a.happiness)).toEqual([58, 40, 58]);
+  });
+
+  it('selling nothing changes nothing', () => {
+    start({ coins: 10, animals: [animal('cow')] });
+    S().sellAnimals([]);
+    expect(S().coins).toBe(10);
+    expect(S().animals).toHaveLength(1);
+  });
+});
+
 describe('death', () => {
   it('a starving animal is warned about, then dies after hours at zero health', () => {
     start({ inventory: {}, barnClean: 100, animals: [animal('goat', { name: 'Zıpzıp', fullness: 0, health: 10 })] });
@@ -220,7 +257,7 @@ describe('old saves', () => {
       incubator: undefined,
     };
     const s = migrate(v1, 1);
-    expect(s.version).toBe(4);
+    expect(s.version).toBe(5);
     expect(s.incubator).toEqual([]);
     expect(s.animals.every((a) => a.pregnantSince === null && a.sickHours === 0 && a.warnedSick === false)).toBe(true);
     expect(s.log[0]).toMatchObject({ births: 0, deaths: 0 });

@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { BASE_AREA, BASE_PLOTS, FACILITIES, FIELD_EXPANSIONS, LEVELS } from '../data';
+import { BASE_AREA, BASE_PLOTS, FACILITIES, FIELD_EXPANSIONS, FIELDS, LAND_AREA, LEVELS } from '../data';
 import {
   barnCapacity,
   farmArea,
   fieldLevel,
   initialState,
   migrate,
+  ownedFields,
   pondCapacity,
   tankCapacity,
   useGame,
@@ -135,6 +136,58 @@ describe('buildings', () => {
   });
 });
 
+describe('land', () => {
+  const east = FIELDS.find((f) => f.id === 'east')!;
+
+  it('starts with only the three home fields; the parcels around are for sale', () => {
+    start();
+    expect(ownedFields(S()).map((f) => f.id)).toEqual(['tomatoes', 'vegetables', 'corn']);
+    expect(FIELDS.filter((f) => f.land).every((f) => S().fields[f.id].length === 0)).toBe(true);
+  });
+
+  it('buying a parcel makes it a field of empty plots, ready to plant, and grows the farm', () => {
+    start({ coins: east.land!.price });
+    const area = farmArea(S());
+    S().buyLand('east');
+    expect(S().coins).toBe(0);
+    expect(S().fields.east).toHaveLength(BASE_PLOTS);
+    expect(S().fields.east.every((p) => p.crop === null)).toBe(true);
+    expect(farmArea(S())).toBe(area + LAND_AREA);
+    useGame.setState({ inventory: { ...S().inventory, seed_wheat: 1 } });
+    S().plant('east', 0, 'wheat');
+    expect(S().fields.east[0].crop).toBe('wheat');
+  });
+
+  it('cannot be bought without the coins or the level, nor twice', () => {
+    start({ coins: east.land!.price - 1 });
+    S().buyLand('east');
+    expect(S().fields.east).toHaveLength(0);
+    const far = FIELDS.find((f) => f.id === 'far')!;
+    start({ coins: RICH, xp: 0 });
+    S().buyLand('far');
+    expect(S().fields.far).toHaveLength(0);
+    expect(S().events[0].text).toBe(`Bu arazi için seviye ${far.land!.level} gerekli.`);
+    start({ coins: RICH });
+    S().buyLand('east');
+    S().buyLand('east');
+    expect(S().coins).toBe(RICH - east.land!.price);
+  });
+
+  it('land not yet bought cannot be widened', () => {
+    start({ coins: RICH, xp: MAX_XP });
+    S().expandField('east');
+    expect(S().fields.east).toHaveLength(0);
+  });
+
+  it('a version-4 save gets the land around it, unbought', () => {
+    const old = { ...initialState(T0), version: 4 } as unknown as GameState;
+    const fields = { tomatoes: old.fields.tomatoes, vegetables: old.fields.vegetables, corn: old.fields.corn };
+    const s = migrate({ ...old, fields }, 4);
+    expect(s.fields.far).toEqual([]);
+    expect(s.fields.tomatoes).toHaveLength(BASE_PLOTS);
+  });
+});
+
 describe('the farm', () => {
   it('grows in area with every expansion', () => {
     start({ coins: RICH, xp: MAX_XP });
@@ -147,7 +200,7 @@ describe('the farm', () => {
   it('a version-2 save loads as it was built', () => {
     const v2 = { ...initialState(T0), version: 2, upgrades: undefined };
     const s = migrate(v2, 2);
-    expect(s.version).toBe(4);
+    expect(s.version).toBe(5);
     expect(s.upgrades).toEqual({ barn: 0, pond: 0, tank: 0 });
     expect(barnCapacity(s)).toBe(FACILITIES.barn.base);
   });

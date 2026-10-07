@@ -34,6 +34,12 @@ npm test           # oyun kurallarının testleri
 - **Büyütme:** Her tarla 8 parselden 12'ye, sonra 16'ya genişler. Ahır 40 → 60 → 80 hayvan,
   havuz 24 → 36 → 48 balık, su deposu 1000 → 1500 → 2000 litre. Her adımın altın bedeli ve
   seviye şartı var; çiftliğin dönümü büyüdükçe artar.
+- **Arazi:** Çiftliğin doğusunda ve güneyinde 6 satılık parsel var (300–1.500 altın, seviye 1–5).
+  Alınan her parsel haritada yeni bir alan ve 8 parsellik yeni bir tarla olur; o da genişletilebilir.
+- **Harita:** Sürüklenir, iki parmakla ya da fare tekerleğiyle yakınlaştırılır, +/− düğmeleri var.
+  Hayvanlar, balıklar ve robotlar haritada dolaşır.
+- **Toplu işlem:** Hayvanlar ekranında "Seç" ile hayvanları işaretleyip hepsini birden sev,
+  ilaç ver (önce en hastalar) ya da onaylayarak sat.
 - **Makineler:** 10 makine ve robot (otomatik sulama, çapa, hasat ve ekim robotları, otomatik
   yemlik, toplama ve temizlik robotları, balık yemleme makinesi, havuz filtresi, güneş enerjili
   pompa) bir kez alınır ve açık kaldıkça işini kendisi yapar; yemi, tohumu ve suyu stoktan kullanır.

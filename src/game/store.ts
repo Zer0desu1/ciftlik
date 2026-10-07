@@ -20,6 +20,8 @@ import {
   FIELDS,
   FISH,
   HATCH_HOURS,
+  HUNGER_PER_HOUR,
+  LAND_AREA,
   INCUBATOR_SIZE,
   ITEMS,
   LEVELS,
@@ -96,7 +98,7 @@ export type DayLog = {
 export type FarmEvent = { id: number; at: number; text: string; tone: 'good' | 'bad' | 'info' };
 
 export type GameState = {
-  version: 4;
+  version: 5;
   farmName: string;
   /** Game time, in minutes since day 1, 00:00. */
   minutes: number;
@@ -143,12 +145,16 @@ type Actions = {
   collectAll: () => void;
   pet: (id: string) => void;
   heal: (id: string) => void;
+  healMany: (ids: string[]) => void;
+  petMany: (ids: string[]) => void;
   cleanBarn: () => void;
   buyAnimal: (species: SpeciesId) => void;
   incubate: (eggs: number) => void;
   expandField: (field: FieldId) => void;
+  buyLand: (field: FieldId) => void;
   upgrade: (facility: FacilityId) => void;
   sellAnimal: (id: string) => void;
+  sellAnimals: (ids: string[]) => void;
   feedFish: () => void;
   cleanPond: () => void;
   stockFish: (species: FishSpeciesId, count: number) => void;
@@ -279,9 +285,11 @@ export function initialState(now = Date.now()): GameState {
       plotWith('corn', 0.5, 70), plotWith('corn', 0.5, 70), plotWith('corn', 0.35, 66), plotWith('wheat', 0.9, 58),
       plotWith('wheat', 0.6, 58), emptyPlot(), emptyPlot(), emptyPlot(),
     ],
+    // Land not yet bought: no plots until it is.
+    east: [], orchard: [], meadow: [], south: [], creek: [], far: [],
   };
   return {
-    version: 4,
+    version: 5,
     farmName: 'Yeşil Vadi Çiftliği',
     minutes: 7 * 60,
     lastReal: now,
@@ -370,11 +378,7 @@ function draft(s: GameState): Draft {
   return {
     ...s,
     inventory: { ...s.inventory },
-    fields: {
-      tomatoes: s.fields.tomatoes.map((p) => ({ ...p })),
-      vegetables: s.fields.vegetables.map((p) => ({ ...p })),
-      corn: s.fields.corn.map((p) => ({ ...p })),
-    },
+    fields: Object.fromEntries(FIELDS.map((f) => [f.id, (s.fields[f.id] ?? []).map((p) => ({ ...p }))])) as Record<FieldId, Plot[]>,
     animals: s.animals.map((a) => ({ ...a })),
     pond: { ...s.pond, batches: s.pond.batches.map((b) => ({ ...b })) },
     incubator: s.incubator.map((t) => ({ ...t })),
@@ -579,7 +583,7 @@ function simulate(d: Draft, hours: number) {
       const s = SPECIES[a.species];
       const adult = isAdult(a, day);
       const old = isOld(a, day);
-      a.fullness = clamp(a.fullness - 6 * dt);
+      a.fullness = clamp(a.fullness - HUNGER_PER_HOUR * dt);
       a.happiness = clamp(a.happiness - 0.8 * dt);
       let healthDelta = 0.4;
       if (a.fullness < 20) healthDelta -= 2.5;
@@ -841,6 +845,32 @@ export const useGame = create<Store>()(
           note(d, `${a.name} iyileşti.`, 'good');
         }),
 
+      healMany: (ids) =>
+        update(set, (d) => {
+          // The sickest first, so short medicine goes where it matters most.
+          const ill = d.animals.filter((a) => ids.includes(a.id) && a.health < 95).sort((a, b) => a.health - b.health);
+          if (!ill.length) return note(d, 'Seçilenlerin hepsi sağlıklı.', 'info');
+          let healed = 0;
+          for (const a of ill) {
+            if (!takeItem(d, 'medicine', 1)) break;
+            a.health = 100;
+            healed++;
+          }
+          if (healed < ill.length) note(d, `İlaç yetmedi: ${healed} hayvan iyileşti, ${ill.length - healed} hayvan bekliyor.`, 'bad');
+          else note(d, `${healed} hayvan iyileşti.`, 'good');
+        }),
+
+      petMany: (ids) =>
+        update(set, (d) => {
+          let n = 0;
+          d.animals.forEach((a) => {
+            if (!ids.includes(a.id)) return;
+            a.happiness = clamp(a.happiness + 18);
+            n++;
+          });
+          if (n) note(d, `${n} hayvan sevildi.`, 'good');
+        }),
+
       cleanBarn: () =>
         update(set, (d) => {
           if (d.barnClean > 90) return;
@@ -878,6 +908,7 @@ export const useGame = create<Store>()(
 
       expandField: (field) =>
         update(set, (d) => {
+          if (!ownsField(d, field)) return note(d, 'Önce bu araziyi satın al.', 'bad');
           const step = FIELD_EXPANSIONS[fieldLevel(d, field)];
           if (!step) return note(d, 'Bu tarla en büyük hâlinde.', 'info');
           if (step.level > levelOf(d.xp)) return note(d, `Genişletmek için seviye ${step.level} gerekli.`, 'bad');
@@ -887,6 +918,19 @@ export const useGame = create<Store>()(
           d.fields[field] = [...d.fields[field], ...Array.from({ length: step.plots }, emptyPlot)];
           gainXp(d, 10);
           note(d, `${FIELDS.find((f) => f.id === field)!.name} genişledi: ${d.fields[field].length} parsel.`, 'good');
+        }),
+
+      buyLand: (field) =>
+        update(set, (d) => {
+          const def = FIELDS.find((f) => f.id === field)!;
+          if (!def.land || ownsField(d, field)) return;
+          if (def.land.level > levelOf(d.xp)) return note(d, `Bu arazi için seviye ${def.land.level} gerekli.`, 'bad');
+          if (d.coins < def.land.price) return note(d, 'Yeterli paran yok.', 'bad');
+          d.coins -= def.land.price;
+          ensureDay(d, dayOf(d.minutes)).expense += def.land.price;
+          d.fields[field] = Array.from({ length: def.plots }, emptyPlot);
+          gainXp(d, 15);
+          note(d, `${def.name} senin! ${def.plots} yeni parsel ekime hazır.`, 'good');
         }),
 
       upgrade: (facility) =>
@@ -903,15 +947,18 @@ export const useGame = create<Store>()(
           note(d, `${f.name} büyüdü: ${step.capacity} ${f.unit}.`, 'good');
         }),
 
-      sellAnimal: (id) =>
+      sellAnimal: (id) => get().sellAnimals([id]),
+
+      sellAnimals: (ids) =>
         update(set, (d) => {
-          const a = d.animals.find((x) => x.id === id);
-          if (!a) return;
-          const value = animalValue(a, dayOf(d.minutes));
-          d.animals = d.animals.filter((x) => x.id !== id);
+          const day = dayOf(d.minutes);
+          const sold = d.animals.filter((a) => ids.includes(a.id));
+          if (!sold.length) return;
+          const value = sold.reduce((n, a) => n + animalValue(a, day), 0);
+          d.animals = d.animals.filter((a) => !ids.includes(a.id));
           d.coins += value;
-          ensureDay(d, dayOf(d.minutes)).income += value;
-          note(d, `${a.name} ${value} altına satıldı.`, 'info');
+          ensureDay(d, day).income += value;
+          note(d, sold.length === 1 ? `${sold[0].name} ${value} altına satıldı.` : `${sold.length} hayvan ${value} altına satıldı.`, 'info');
         }),
 
       feedFish: () =>
@@ -1041,7 +1088,7 @@ export const useGame = create<Store>()(
     }),
     {
       name: 'ciftlik-save',
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => migrate(persisted, version),
       storage: createJSONStorage(() => AsyncStorage),
       // Only data is saved; the actions are rebuilt on load.
@@ -1078,6 +1125,15 @@ export function fieldLevel(s: GameState, field: FieldId): number {
   return level;
 }
 
+/** Whether a field is part of the farm: the first three always, a parcel once bought. */
+export function ownsField(s: GameState, field: FieldId): boolean {
+  return (s.fields[field]?.length ?? 0) > 0;
+}
+
+export function ownedFields(s: GameState) {
+  return FIELDS.filter((f) => ownsField(s, f.id));
+}
+
 /** A building's capacity at its current size. */
 export function capacity(s: GameState, facility: FacilityId): number {
   const f = FACILITIES[facility];
@@ -1093,7 +1149,8 @@ export const tankCapacity = (s: GameState) => capacity(s, 'tank');
 export function farmArea(s: GameState): number {
   const fields = FIELDS.reduce((n, f) => n + fieldLevel(s, f.id), 0);
   const buildings = (Object.keys(FACILITIES) as FacilityId[]).reduce((n, f) => n + (s.upgrades?.[f] ?? 0), 0);
-  return BASE_AREA + fields * 1.5 + buildings * 0.5;
+  const land = FIELDS.filter((f) => f.land && ownsField(s, f.id)).length;
+  return BASE_AREA + fields * 1.5 + buildings * 0.5 + land * LAND_AREA;
 }
 
 /**
@@ -1115,7 +1172,9 @@ export function migrate(persisted: unknown, version: number): GameState {
     s.machines = {};
     s.warned = {};
   }
-  s.version = 4;
+  // Version 5 adds land to buy around the farm; none of it is owned yet.
+  for (const f of FIELDS) s.fields[f.id] ??= [];
+  s.version = 5;
   return s;
 }
 

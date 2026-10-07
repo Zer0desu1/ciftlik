@@ -35,7 +35,7 @@ export default function WaterScreen() {
       </Card>
 
       <SectionHeader title="Tarlalar" subtitle="Susuz kalan parselleri tek dokunuşla sula" />
-      {FIELDS.map((f) => {
+      {FIELDS.filter((f) => fields[f.id].length).map((f) => {
         const s = summarizeField(fields[f.id]);
         return (
           <Card key={f.id} onPress={() => router.push(`/field/${f.id}`)} style={{ gap: S.md }}>

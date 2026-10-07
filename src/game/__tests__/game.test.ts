@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clockLabel, dayOf, hourOf, weatherFor } from '../clock';
-import { CROPS, FISH, POND_CAPACITY, SPECIES, TANK_CAPACITY, WATER_PER_PLOT, WEATHER } from '../data';
+import { CROPS, FISH, HUNGER_PER_HOUR, POND_CAPACITY, SPECIES, TANK_CAPACITY, WATER_PER_PLOT, WEATHER } from '../data';
 import { farmHealth, plotStage, summarizeField, tasks } from '../selectors';
 import {
   buyPrice,
@@ -260,10 +260,12 @@ describe('fields', () => {
 });
 
 describe('animals', () => {
-  it('get hungry at 6 points an hour', () => {
+  it('get hungry slowly: fed in the evening, still half full by breakfast', () => {
     start({ animals: [animal('cow')] });
     advance(5);
-    expect(S().animals[0].fullness).toBeCloseTo(70);
+    expect(S().animals[0].fullness).toBeCloseTo(100 - 5 * HUNGER_PER_HOUR);
+    advance(7); // 12 hours, an evening meal to breakfast
+    expect(S().animals[0].fullness).toBeGreaterThan(50);
   });
 
   it('eat their ration from the barn when fed, and only the hungry ones eat', () => {

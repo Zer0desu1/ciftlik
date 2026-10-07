@@ -176,7 +176,7 @@ describe('catching fish', () => {
 describe('old saves', () => {
   it('a version-3 save loads with no machines', () => {
     const s = migrate({ ...initialState(T0), version: 3, machines: undefined, warned: undefined }, 3);
-    expect(s.version).toBe(4);
+    expect(s.version).toBe(5);
     expect(s.machines).toEqual({});
     expect(s.warned).toEqual({});
   });

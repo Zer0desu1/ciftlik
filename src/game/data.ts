@@ -124,15 +124,28 @@ export const CROPS: Record<CropId, Crop> = {
   pumpkin: { id: 'pumpkin', name: 'Bal kabağı', seed: 'seed_pumpkin', harvest: 'pumpkin', growHours: 30, yield: 2, level: 5, thirst: 5 },
 };
 
-export type FieldId = 'tomatoes' | 'vegetables' | 'corn';
+export type FieldId = 'tomatoes' | 'vegetables' | 'corn' | 'east' | 'orchard' | 'meadow' | 'south' | 'creek' | 'far';
 
-export type FieldDef = { id: FieldId; name: string; plots: number; suggested: CropId[] };
+/**
+ * A field. The first three come with the farm; the rest are parcels of land
+ * around it, bought one by one (`land`), each a new field on the map.
+ */
+export type FieldDef = { id: FieldId; name: string; plots: number; suggested: CropId[]; land?: { price: number; level: number } };
 
 export const FIELDS: FieldDef[] = [
   { id: 'tomatoes', name: 'Domates Tarlası', plots: 8, suggested: ['tomato', 'pepper', 'strawberry'] },
   { id: 'vegetables', name: 'Sebze Bahçesi', plots: 8, suggested: ['lettuce', 'carrot', 'pumpkin'] },
   { id: 'corn', name: 'Mısır Tarlası', plots: 8, suggested: ['corn', 'wheat'] },
+  { id: 'east', name: 'Doğu Tarlası', plots: 8, suggested: ['wheat', 'corn'], land: { price: 300, level: 1 } },
+  { id: 'orchard', name: 'Çilek Bahçesi', plots: 8, suggested: ['strawberry', 'lettuce'], land: { price: 450, level: 2 } },
+  { id: 'meadow', name: 'Çayır Tarlası', plots: 8, suggested: ['carrot', 'pumpkin'], land: { price: 650, level: 3 } },
+  { id: 'south', name: 'Güney Tarlası', plots: 8, suggested: ['tomato', 'pepper'], land: { price: 850, level: 3 } },
+  { id: 'creek', name: 'Dere Kenarı', plots: 8, suggested: ['lettuce', 'carrot'], land: { price: 1100, level: 4 } },
+  { id: 'far', name: 'Uzak Tarla', plots: 8, suggested: ['pumpkin', 'corn'], land: { price: 1500, level: 5 } },
 ];
+
+/** Dönüm a bought parcel adds to the farm. */
+export const LAND_AREA = 2.5;
 
 export type SpeciesId = 'cow' | 'chicken' | 'sheep' | 'goat';
 
@@ -228,6 +241,11 @@ export const TANK_CAPACITY = 1000;
 /** Litres a single watering takes from the tank. */
 export const WATER_PER_PLOT = 40;
 export const BARN_CAPACITY = 40;
+/**
+ * Fullness an animal loses per game hour. Fed at 18:00, it is still half full
+ * at breakfast; left unfed altogether, it goes hungry in about a day.
+ */
+export const HUNGER_PER_HOUR = 3.5;
 /** Game hours an egg sits in the incubator before it hatches. */
 export const HATCH_HOURS = 24;
 /** Eggs one incubator tray holds. */
