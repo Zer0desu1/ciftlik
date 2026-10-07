@@ -5,6 +5,8 @@ besle ve ürünlerini topla; balık havuzunu besle ve balık tut; ürünlerini p
 
 Expo (SDK 57) + React Native + TypeScript. iOS, Android ve web'de çalışır.
 
+**Tarayıcıda oyna:** https://zer0desu1.github.io/ciftlik/ — `main`'e her push'ta yeniden yayınlanır.
+
 ## Çalıştırma
 
 ```bash
