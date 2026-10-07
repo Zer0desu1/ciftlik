@@ -257,7 +257,7 @@ describe('old saves', () => {
       incubator: undefined,
     };
     const s = migrate(v1, 1);
-    expect(s.version).toBe(5);
+    expect(s.version).toBe(7);
     expect(s.incubator).toEqual([]);
     expect(s.animals.every((a) => a.pregnantSince === null && a.sickHours === 0 && a.warnedSick === false)).toBe(true);
     expect(s.log[0]).toMatchObject({ births: 0, deaths: 0 });

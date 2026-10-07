@@ -99,6 +99,10 @@ export function tasks(state: GameState): Task[] {
   const today = dayOf(state.minutes);
   const hungry = state.animals.filter((a) => a.fullness < 35).length;
 
+  if (state.power?.unpaid > 0) {
+    out.push({ id: 'power', text: `Elektrik faturası ödenmedi (${state.power.unpaid} altın): makineler durdu`, tone: 'urgent', href: '/power' });
+  }
+
   const sick = state.animals.filter((a) => a.health < 15);
   if (sick.length) {
     out.push({ id: 'sick', text: sick.length === 1 ? `${sick[0].name} çok hasta, ilaç ver` : `${sick.length} hayvan çok hasta`, tone: 'urgent', href: sick.length === 1 ? `/animal/${sick[0].id}` : '/livestock' });

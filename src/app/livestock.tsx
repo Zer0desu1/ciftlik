@@ -188,7 +188,8 @@ export default function LivestockScreen() {
   const sp = SPECIES[species];
   const ready = productReady(state, species);
   const level = levelOf(state.xp);
-  const { feedSpecies, collect, cleanBarn, buyAnimal } = useGame.getState();
+  const { feedSpecies, collect, cleanBarn, buyAnimal, petMany, healMany } = useGame.getState();
+  const ill = state.animals.filter((a) => a.health < 95);
 
   return (
     <>
@@ -218,6 +219,39 @@ export default function LivestockScreen() {
       </Card>
 
       <FeedingTimeline />
+
+      {/* The whole herd at once; to care for only some, use "Seç" below. */}
+      <Card style={{ gap: S.sm }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Txt v="label">Bakım</Txt>
+          <Txt v="caption">
+            {ill.length ? `${ill.length} hasta` : 'Herkes sağlıklı'} · {state.inventory.medicine ?? 0} ilaç
+          </Txt>
+        </Row>
+        <Row gap={S.sm}>
+          <Button
+            kind="soft"
+            small
+            label="Hepsini sev"
+            icon={<HandHeart size={14} color={C.green} />}
+            onPress={() => petMany(state.animals.map((a) => a.id))}
+            disabled={!state.animals.some((a) => a.happiness < 95)}
+            style={{ flex: 1 }}
+          />
+          <Button
+            kind="soft"
+            small
+            label={ill.length ? `Hastalara ilaç (${ill.length})` : 'Hastalara ilaç'}
+            icon={<PillIcon size={14} color={C.green} />}
+            onPress={() => healMany(ill.map((a) => a.id))}
+            disabled={!ill.length || !(state.inventory.medicine ?? 0)}
+            style={{ flex: 1 }}
+          />
+        </Row>
+        {ill.length && !(state.inventory.medicine ?? 0) ? (
+          <Txt v="caption" style={{ color: C.rose }}>İlacın kalmadı. Pazardan alabilirsin.</Txt>
+        ) : null}
+      </Card>
 
       <Card style={{ gap: S.sm }}>
         <Row style={{ justifyContent: 'space-between' }}>

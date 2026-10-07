@@ -5,7 +5,7 @@ import { View } from 'react-native';
 import { CoinIcon } from '@/components/art/items';
 import { Button, Card, IconBadge, Pill, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
 import { BASE_PLOTS, FACILITIES, FIELD_EXPANSIONS, FIELDS, LAND_AREA, type FacilityId, type FieldId } from '@/game/data';
-import { capacity, farmArea, fieldLevel, levelOf, ownsField, useGame } from '@/game/store';
+import { capacity, farmArea, fieldLevel, levelOf, ownsField, ownsLand, useGame } from '@/game/store';
 import { C, S } from '@/theme';
 
 const FACILITY_LOOK: Record<FacilityId, { icon: ReactNode; tint: string }> = {
@@ -107,8 +107,8 @@ export default function UpgradesScreen() {
         </Txt>
       </Card>
 
-      <SectionHeader title="Arazi" subtitle={`Her parsel ${BASE_PLOTS} parsellik yeni bir tarla ve haritada yeni bir alan`} />
-      {FIELDS.filter((f) => f.land && !ownsField(state, f.id)).map((f) => (
+      <SectionHeader title="Arazi" subtitle="Tarla olarak gelir; haritada araziye dokunup ahıra, havuza ya da su deposuna çevirebilirsin" />
+      {FIELDS.filter((f) => f.land && !ownsLand(state, f.id)).map((f) => (
         <UpgradeCard
           key={f.id}
           icon={<Map size={20} color={C.amber} />}
@@ -123,7 +123,7 @@ export default function UpgradesScreen() {
           action="Satın al"
         />
       ))}
-      {FIELDS.every((f) => !f.land || ownsField(state, f.id)) ? (
+      {FIELDS.every((f) => !f.land || ownsLand(state, f.id)) ? (
         <Card>
           <Txt v="body">Çevredeki bütün araziyi aldın.</Txt>
         </Card>

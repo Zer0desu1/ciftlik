@@ -22,6 +22,12 @@ import {
   HATCH_HOURS,
   HUNGER_PER_HOUR,
   LAND_AREA,
+  LAND_USES,
+  POWER,
+  SUN,
+  WIND,
+  landName,
+  type LandUse,
   INCUBATOR_SIZE,
   ITEMS,
   LEVELS,
@@ -95,10 +101,23 @@ export type DayLog = {
   deaths: number;
 };
 
+/** The farm's electricity: what is built, and today's meter readings. */
+export type Power = {
+  panels: number;
+  turbines: number;
+  /** kWh used and made since midnight. */
+  used: number;
+  made: number;
+  /** A bill not yet paid, in coins. While it stands the machines are off. */
+  unpaid: number;
+  /** The last days settled, newest first. */
+  history: { day: number; used: number; made: number; net: number }[];
+};
+
 export type FarmEvent = { id: number; at: number; text: string; tone: 'good' | 'bad' | 'info' };
 
 export type GameState = {
-  version: 5;
+  version: 7;
   farmName: string;
   /** Game time, in minutes since day 1, 00:00. */
   minutes: number;
@@ -108,6 +127,9 @@ export type GameState = {
   xp: number;
   inventory: Partial<Record<ItemId, number>>;
   fields: Record<FieldId, Plot[]>;
+  /** The land owned and what is on it. Land not listed is still for sale. */
+  land: Partial<Record<FieldId, LandUse>>;
+  power: Power;
   animals: Animal[];
   barnClean: number;
   /** `feeds` counts every feeding, by hand or machine, so the pond can show the food going in. */
@@ -151,7 +173,11 @@ type Actions = {
   buyAnimal: (species: SpeciesId) => void;
   incubate: (eggs: number) => void;
   expandField: (field: FieldId) => void;
-  buyLand: (field: FieldId) => void;
+  buyLand: (field: FieldId, use?: LandUse) => void;
+  buyPower: (kind: 'panel' | 'turbine') => void;
+  payBill: () => void;
+  convertLand: (field: FieldId, to: LandUse) => void;
+  swapLand: (a: FieldId, b: FieldId) => void;
   upgrade: (facility: FacilityId) => void;
   sellAnimal: (id: string) => void;
   sellAnimals: (ids: string[]) => void;
@@ -288,9 +314,12 @@ export function initialState(now = Date.now()): GameState {
     // Land not yet bought: no plots until it is.
     east: [], orchard: [], meadow: [], south: [], creek: [], far: [],
   };
+  const land: GameState['land'] = { tomatoes: 'field', vegetables: 'field', corn: 'field' };
   return {
-    version: 5,
+    version: 7,
     farmName: 'Yeşil Vadi Çiftliği',
+    land,
+    power: { panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] },
     minutes: 7 * 60,
     lastReal: now,
     coins: 300,
@@ -385,6 +414,8 @@ function draft(s: GameState): Draft {
     upgrades: { ...s.upgrades },
     machines: Object.fromEntries(Object.entries(s.machines).map(([k, v]) => [k, { ...v }])),
     warned: { ...s.warned },
+    land: { ...s.land },
+    power: { ...s.power, history: [...s.power.history] },
     meals: { day: s.meals.day, done: [...s.meals.done] as [boolean, boolean, boolean] },
     log: s.log.map((l) => ({ ...l })),
     events: [...s.events],
@@ -466,7 +497,8 @@ function warnOnce(d: Draft, key: string, text: string) {
   note(d, text, 'bad');
 }
 
-const running = (d: Draft, id: MachineId) => d.machines[id]?.on === true;
+/** A machine works while switched on and the electricity is paid for. */
+const running = (d: Draft, id: MachineId) => d.machines[id]?.on === true && !(d.power.unpaid > 0);
 
 /**
  * Every switched-on machine does its chore. Runs after each slice of the
@@ -490,25 +522,33 @@ function runMachines(d: Draft, dt: number) {
       }
       if (running(d, 'harvester')) harvestPlot(d, def.id, i);
       const now = d.fields[def.id][i];
-      if (running(d, 'planter') && !now.crop && now.lastCrop) {
-        const crop = CROPS[now.lastCrop];
-        if (takeItem(d, crop.seed, 1)) {
-          d.fields[def.id][i] = { ...emptyPlot(), crop: now.lastCrop, moisture: now.moisture, lastCrop: now.lastCrop };
-        } else {
-          warnOnce(d, `planter-${crop.id}`, `Ekim robotu: ${crop.name.toLowerCase()} tohumu bitti.`);
+      if (running(d, 'planter') && (!now.crop || now.dead)) {
+        // A dead plant is cleared and sown again. A plot never sown gets what
+        // the field is for, of whatever seed is in store.
+        const want = (now.dead ? now.crop : now.lastCrop) ?? def.suggested.find((c) => (d.inventory[CROPS[c].seed] ?? 0) > 0) ?? null;
+        if (want) {
+          const crop = CROPS[want];
+          if (takeItem(d, crop.seed, 1)) {
+            d.fields[def.id][i] = { ...emptyPlot(), crop: want, moisture: now.moisture, lastCrop: want };
+          } else {
+            if (now.dead) d.fields[def.id][i] = { ...emptyPlot(), moisture: now.moisture, lastCrop: want };
+            warnOnce(d, `planter-${crop.id}`, `Ekim robotu: ${crop.name.toLowerCase()} tohumu bitti.`);
+          }
         }
       }
     }
   }
 
-  if (running(d, 'feeder') && currentMeal(hour) >= 0) {
-    let fed = 0;
+  if (running(d, 'feeder')) {
+    // At each meal it serves the whole herd, as "Hepsini besle" would, so the
+    // meal counts as done; between meals it tops up anyone going hungry.
+    const slot = currentMeal(hour);
+    const mealDue = slot >= 0 && !(d.meals.day === dayOf(d.minutes) && d.meals.done[slot]);
     (Object.keys(SPECIES) as SpeciesId[]).forEach((sp) => {
-      const r = feedHerd(d, sp, 60);
-      fed += r.fed;
+      const r = feedHerd(d, sp, mealDue ? 95 : 40);
       if (r.short) warnOnce(d, `feeder-${SPECIES[sp].feed}`, `Otomatik yemlik: ${ITEMS[SPECIES[sp].feed].name.toLowerCase()} bitti.`);
     });
-    if (fed) markMeal(d);
+    if (mealDue) markMeal(d);
   }
   if (running(d, 'collector')) (Object.keys(SPECIES) as SpeciesId[]).forEach((sp) => collectHerd(d, sp));
   if (running(d, 'cleaner') && d.barnClean < 50) d.barnClean = 100;
@@ -523,6 +563,58 @@ function runMachines(d: Draft, dt: number) {
   if (running(d, 'solar_pump') && hour >= 7 && hour < 19) d.tank = Math.min(tankCapacity(d), d.tank + 30 * dt);
 }
 
+/** kWh an hour the farm makes now: panels and solar land by the sun, turbines by the wind. */
+export function powerMade(s: GameState, minutes = s.minutes): number {
+  const hour = hourOf(minutes) + (minutes % 60) / 60;
+  const kind = weatherFor(dayOf(minutes)).kind;
+  // The sun rises at 6 and sets at 20, strongest at 13.
+  const sun = hour > 6 && hour < 20 ? Math.sin(((hour - 6) / 14) * Math.PI) * SUN[kind] : 0;
+  const solarLand = landCount(s, 'solar') * LAND_USES.solar.adds;
+  return (s.power.panels * POWER.panel.kwh + solarLand) * sun + s.power.turbines * POWER.turbine.kwh * WIND[kind];
+}
+
+/** kWh an hour the farm uses now: the house and the machines that are working. */
+export function powerUsed(s: GameState): number {
+  const machines = (Object.keys(s.machines) as MachineId[]).filter((id) => s.machines[id]?.on && !(s.power.unpaid > 0));
+  return POWER.house + machines.reduce((n, id) => n + MACHINES[id].power, 0);
+}
+
+/** What today's meter comes to so far: positive is owed, negative is earned. */
+export function powerBalance(s: GameState): number {
+  const net = s.power.used - s.power.made;
+  return net > 0 ? Math.round(net * POWER.buy) : -Math.round(-net * POWER.sell);
+}
+
+function meter(d: Draft, dt: number) {
+  d.power.used += powerUsed(d) * dt;
+  d.power.made += powerMade(d) * dt;
+}
+
+/** Midnight: the day's electricity is paid for, or the surplus sold. */
+function settlePower(d: Draft, day: number) {
+  const net = powerBalance(d);
+  d.power.history = [{ day, used: Math.round(d.power.used), made: Math.round(d.power.made), net }, ...d.power.history].slice(0, 7);
+  d.power.used = 0;
+  d.power.made = 0;
+  const log = ensureDay(d, day);
+  if (net < 0) {
+    d.coins += -net;
+    log.income += -net;
+    note(d, `Fazla elektrik şebekeye satıldı: +${-net} altın.`, 'good');
+  } else if (net > 0) {
+    const bill = net + d.power.unpaid;
+    if (d.coins >= bill) {
+      d.coins -= bill;
+      log.expense += bill;
+      d.power.unpaid = 0;
+      note(d, `Elektrik faturası ödendi: ${bill} altın.`, 'info');
+    } else {
+      d.power.unpaid = bill;
+      note(d, `Elektrik faturası ödenemedi (${bill} altın). Ödenene kadar makineler çalışmaz.`, 'bad');
+    }
+  }
+}
+
 /** Advances the simulation by `hours` game hours, in slices of at most one hour. */
 function simulate(d: Draft, hours: number) {
   let left = hours;
@@ -530,9 +622,11 @@ function simulate(d: Draft, hours: number) {
     const dt = Math.min(1, left);
     left -= dt;
     const beforeDay = dayOf(d.minutes);
+    meter(d, dt);
     d.minutes += dt * 60;
     const day = dayOf(d.minutes);
     if (day !== beforeDay) {
+      settlePower(d, beforeDay);
       d.meals = { day, done: [false, false, false] };
       ensureDay(d, day);
       const w = weatherFor(day);
@@ -920,17 +1014,92 @@ export const useGame = create<Store>()(
           note(d, `${FIELDS.find((f) => f.id === field)!.name} genişledi: ${d.fields[field].length} parsel.`, 'good');
         }),
 
-      buyLand: (field) =>
+      buyLand: (field, use = 'field') =>
         update(set, (d) => {
           const def = FIELDS.find((f) => f.id === field)!;
-          if (!def.land || ownsField(d, field)) return;
-          if (def.land.level > levelOf(d.xp)) return note(d, `Bu arazi için seviye ${def.land.level} gerekli.`, 'bad');
-          if (d.coins < def.land.price) return note(d, 'Yeterli paran yok.', 'bad');
-          d.coins -= def.land.price;
-          ensureDay(d, dayOf(d.minutes)).expense += def.land.price;
-          d.fields[field] = Array.from({ length: def.plots }, emptyPlot);
+          if (!def.land || ownsLand(d, field)) return;
+          const level = Math.max(def.land.level, LAND_USES[use].level);
+          if (level > levelOf(d.xp)) return note(d, `Bunun için seviye ${level} gerekli.`, 'bad');
+          const price = landPrice(field, use);
+          if (d.coins < price) return note(d, 'Yeterli paran yok.', 'bad');
+          d.coins -= price;
+          ensureDay(d, dayOf(d.minutes)).expense += price;
+          d.land[field] = use;
+          d.fields[field] = use === 'field' ? Array.from({ length: def.plots }, emptyPlot) : [];
           gainXp(d, 15);
-          note(d, `${def.name} senin! ${def.plots} yeni parsel ekime hazır.`, 'good');
+          note(
+            d,
+            use === 'field' ? `${def.name} senin! ${def.plots} yeni parsel ekime hazır.` : `${landName(def, use)} hazır: ${LAND_USES[use].blurb}.`,
+            'good',
+          );
+        }),
+
+      buyPower: (kind) =>
+        update(set, (d) => {
+          const def = POWER[kind];
+          const key = kind === 'panel' ? 'panels' : 'turbines';
+          const name = kind === 'panel' ? 'Güneş paneli' : 'Rüzgâr türbini';
+          if (d.power[key] >= def.max) return note(d, `${name} için yer kalmadı.`, 'info');
+          if (def.level > levelOf(d.xp)) return note(d, `${name} için seviye ${def.level} gerekli.`, 'bad');
+          if (d.coins < def.price) return note(d, 'Yeterli paran yok.', 'bad');
+          d.coins -= def.price;
+          ensureDay(d, dayOf(d.minutes)).expense += def.price;
+          d.power[key] += 1;
+          gainXp(d, 5);
+          note(d, `${name} kuruldu (${d.power[key]} / ${def.max}).`, 'good');
+        }),
+
+      payBill: () =>
+        update(set, (d) => {
+          const bill = d.power.unpaid;
+          if (!bill) return;
+          if (d.coins < bill) return note(d, `Faturayı ödemek için ${bill} altın gerekli.`, 'bad');
+          d.coins -= bill;
+          ensureDay(d, dayOf(d.minutes)).expense += bill;
+          d.power.unpaid = 0;
+          note(d, 'Fatura ödendi, makineler yeniden çalışıyor.', 'good');
+        }),
+
+      convertLand: (field, to) =>
+        update(set, (d) => {
+          const def = FIELDS.find((f) => f.id === field)!;
+          const from = d.land[field];
+          if (!from || from === to) return;
+          const use = LAND_USES[to];
+          if (use.level > levelOf(d.xp)) return note(d, `${use.name} için seviye ${use.level} gerekli.`, 'bad');
+          if (d.coins < use.cost) return note(d, 'Yeterli paran yok.', 'bad');
+          // What is on the land now has to go somewhere first.
+          if (from === 'field' && d.fields[field].some((p) => p.crop && !p.dead)) {
+            return note(d, `${def.name} üzerinde ekin var: önce hasat et ya da boşalt.`, 'bad');
+          }
+          if (from === 'barn') {
+            const left = barnCapacity(d) - LAND_USES.barn.adds;
+            const herd = d.animals.length + d.incubator.reduce((n, t) => n + t.eggs, 0);
+            if (herd > left) return note(d, `Hayvanlar kalan ahıra sığmaz: önce ${herd - left} hayvan sat.`, 'bad');
+          }
+          if (from === 'pond') {
+            const left = pondCapacity(d) - LAND_USES.pond.adds;
+            const fish = d.pond.batches.reduce((n, b) => n + b.count, 0);
+            if (fish > left) return note(d, `Balıklar kalan havuza sığmaz: önce ${fish - left} balık tut.`, 'bad');
+          }
+          const fromName = landName(def, from);
+          d.coins -= use.cost;
+          ensureDay(d, dayOf(d.minutes)).expense += use.cost;
+          d.land[field] = to;
+          d.fields[field] = to === 'field' ? Array.from({ length: def.plots }, emptyPlot) : [];
+          d.tank = Math.min(d.tank, tankCapacity(d));
+          gainXp(d, 5);
+          note(d, `${fromName} artık ${landName(def, to)}.`, 'good');
+        }),
+
+      swapLand: (a, b) =>
+        update(set, (d) => {
+          if (a === b || !d.land[a] || !d.land[b]) return;
+          const [da, db] = [a, b].map((id) => FIELDS.find((f) => f.id === id)!);
+          const names = [landName(da, d.land[a]!), landName(db, d.land[b]!)];
+          [d.land[a], d.land[b]] = [d.land[b], d.land[a]];
+          [d.fields[a], d.fields[b]] = [d.fields[b], d.fields[a]];
+          note(d, `${names[0]} ile ${names[1]} yer değiştirdi.`, 'info');
         }),
 
       upgrade: (facility) =>
@@ -1088,7 +1257,7 @@ export const useGame = create<Store>()(
     }),
     {
       name: 'ciftlik-save',
-      version: 5,
+      version: 7,
       migrate: (persisted, version) => migrate(persisted, version),
       storage: createJSONStorage(() => AsyncStorage),
       // Only data is saved; the actions are rebuilt on load.
@@ -1125,13 +1294,33 @@ export function fieldLevel(s: GameState, field: FieldId): number {
   return level;
 }
 
-/** Whether a field is part of the farm: the first three always, a parcel once bought. */
+/** Whether a piece of land is the farm's: the first three always, a parcel once bought. */
+export function ownsLand(s: GameState, field: FieldId): boolean {
+  return !!s.land?.[field];
+}
+
+/** Whether a piece of land is owned and used as a field. */
 export function ownsField(s: GameState, field: FieldId): boolean {
-  return (s.fields[field]?.length ?? 0) > 0;
+  return s.land?.[field] === 'field';
 }
 
 export function ownedFields(s: GameState) {
   return FIELDS.filter((f) => ownsField(s, f.id));
+}
+
+export function ownedLand(s: GameState) {
+  return FIELDS.filter((f) => ownsLand(s, f.id));
+}
+
+/** How many pieces of land are given over to a use. */
+export function landCount(s: GameState, use: LandUse): number {
+  return FIELDS.filter((f) => s.land?.[f.id] === use).length;
+}
+
+/** What a parcel for sale costs, ready as `use`: a field comes with it, anything else is built on. */
+export function landPrice(field: FieldId, use: LandUse): number {
+  const def = FIELDS.find((f) => f.id === field)!;
+  return (def.land?.price ?? 0) + (use === 'field' ? 0 : LAND_USES[use].cost);
 }
 
 /** A building's capacity at its current size. */
@@ -1141,15 +1330,16 @@ export function capacity(s: GameState, facility: FacilityId): number {
   return level === 0 ? f.base : f.steps[level - 1].capacity;
 }
 
-export const barnCapacity = (s: GameState) => capacity(s, 'barn');
-export const pondCapacity = (s: GameState) => capacity(s, 'pond');
-export const tankCapacity = (s: GameState) => capacity(s, 'tank');
+// The buildings, plus whatever land has been given over to more of them.
+export const barnCapacity = (s: GameState) => capacity(s, 'barn') + landCount(s, 'barn') * LAND_USES.barn.adds;
+export const pondCapacity = (s: GameState) => capacity(s, 'pond') + landCount(s, 'pond') * LAND_USES.pond.adds;
+export const tankCapacity = (s: GameState) => capacity(s, 'tank') + landCount(s, 'tank') * LAND_USES.tank.adds;
 
 /** The farm's size in dönüm: it grows with every field and building enlarged. */
 export function farmArea(s: GameState): number {
   const fields = FIELDS.reduce((n, f) => n + fieldLevel(s, f.id), 0);
   const buildings = (Object.keys(FACILITIES) as FacilityId[]).reduce((n, f) => n + (s.upgrades?.[f] ?? 0), 0);
-  const land = FIELDS.filter((f) => f.land && ownsField(s, f.id)).length;
+  const land = FIELDS.filter((f) => f.land && ownsLand(s, f.id)).length;
   return BASE_AREA + fields * 1.5 + buildings * 0.5 + land * LAND_AREA;
 }
 
@@ -1174,7 +1364,11 @@ export function migrate(persisted: unknown, version: number): GameState {
   }
   // Version 5 adds land to buy around the farm; none of it is owned yet.
   for (const f of FIELDS) s.fields[f.id] ??= [];
-  s.version = 5;
+  // Version 6 records what each piece of land is used for; until now, all were fields.
+  if (version < 6) s.land = Object.fromEntries(FIELDS.filter((f) => s.fields[f.id].length).map((f) => [f.id, 'field']));
+  // Version 7 brings electricity: nothing built yet, the meter at zero.
+  s.power ??= { panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] };
+  s.version = 7;
   return s;
 }
 

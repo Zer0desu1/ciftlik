@@ -4,7 +4,7 @@ import { Animated, Easing, View } from 'react-native';
 import { AnimalArt, FishArt } from '@/components/art/animals';
 import { RobotSprite } from '@/components/art/machines';
 import { dayOf } from '@/game/clock';
-import { MACHINES, type FieldId, type MachineId, type SpeciesId } from '@/game/data';
+import { MACHINES, type FieldId, type LandUse, type MachineId, type SpeciesId } from '@/game/data';
 import { isAdult, type GameState } from '@/game/store';
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -15,22 +15,34 @@ const PEN: Rect = { x: 60, y: 264, w: 116, h: 80 };
 const COOP: Rect = { x: 16, y: 300, w: 46, h: 44 };
 /** Inside the pond's oval, so a fish never swims onto the grass. */
 const POND: Rect = { x: 268, y: 266, w: 66, h: 21 };
-/** Each field's planted area, where the field robots work. */
-const FIELD_AREA: Record<FieldId, Rect> = {
-  tomatoes: { x: 128, y: 38, w: 216, h: 66 },
-  vegetables: { x: 16, y: 150, w: 88, h: 66 },
-  corn: { x: 128, y: 150, w: 216, h: 66 },
-  east: { x: 376, y: 38, w: 168, h: 66 },
-  orchard: { x: 376, y: 150, w: 168, h: 66 },
-  meadow: { x: 376, y: 262, w: 168, h: 82 },
-  south: { x: 16, y: 398, w: 160, h: 66 },
-  creek: { x: 200, y: 398, w: 144, h: 66 },
-  far: { x: 376, y: 398, w: 168, h: 66 },
+/** Each piece of land's box (as ZONES in farm-map; kept here to avoid an import cycle). */
+const LAND_BOX: Record<FieldId, Rect> = {
+  tomatoes: { x: 120, y: 8, w: 232, h: 104 },
+  vegetables: { x: 8, y: 120, w: 104, h: 104 },
+  corn: { x: 120, y: 120, w: 232, h: 104 },
+  east: { x: 368, y: 8, w: 184, h: 104 },
+  orchard: { x: 368, y: 120, w: 184, h: 104 },
+  meadow: { x: 368, y: 232, w: 184, h: 120 },
+  south: { x: 8, y: 368, w: 176, h: 104 },
+  creek: { x: 192, y: 368, w: 160, h: 104 },
+  far: { x: 368, y: 368, w: 184, h: 104 },
 };
+
+/** Where things move on a piece of land, by what it is used for. */
+function areaOn(f: FieldId, use: LandUse): Rect {
+  const z = LAND_BOX[f];
+  if (use === 'pond') {
+    // Inside the pond's oval (see PondPatch).
+    const rx = z.w / 2 - 18;
+    const ry = z.h / 2 - 22;
+    return { x: z.x + z.w / 2 - rx * 0.6, y: z.y + z.h / 2 + 10 - ry * 0.55, w: rx * 1.2, h: ry * 1.1 };
+  }
+  if (use === 'barn') return { x: z.x + 50, y: z.y + 30, w: z.w - 60, h: z.h - 40 };
+  return { x: z.x + 8, y: z.y + 30, w: z.w - 16, h: z.h - 38 };
+}
 // Stable arrays, so a Wanderer's effect doesn't restart on every render.
 const PEN_AREAS = [PEN];
 const COOP_AREAS = [COOP];
-const POND_AREAS = [POND];
 const SPOT: Partial<Record<MachineId, { x: number; y: number }>> = {
   feeder: { x: 150, y: 262 },
   fish_feeder: { x: 278, y: 252 },
@@ -160,17 +172,22 @@ function Bobber({ at, view, size, children }: { at: { x: number; y: number }; vi
  * about the coop, and whatever machines are running going about their chores.
  * Drawn above the map and below nothing - it takes no touches.
  */
-export function MapLife({ state, view, fields }: { state: GameState; view: View_; fields: FieldId[] }) {
+export function MapLife({ state, view, land }: { state: GameState; view: View_; land: string }) {
   const day = dayOf(state.minutes);
-  const fieldKey = fields.join(',');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const fieldAreas = useMemo(() => fields.map((f) => FIELD_AREA[f]), [fieldKey]);
+  // `land` is "id:use,id:use": what each owned piece of land is. Each area is
+  // its own stable array, so a Wanderer's effect doesn't restart on every render.
+  const { fieldAreas, pens, ponds } = useMemo(() => {
+    const parts = land ? land.split(',').map((p) => p.split(':') as [FieldId, LandUse]) : [];
+    const on = (use: LandUse) => parts.filter(([, u]) => u === use).map(([f]) => areaOn(f, use));
+    return { fieldAreas: on('field'), pens: [PEN, ...on('barn')].map((a) => [a]), ponds: [POND, ...on('pond')].map((a) => [a]) };
+  }, [land]);
   const herd: ReactNode[] = [];
 
   (['cow', 'sheep', 'goat', 'chicken'] as SpeciesId[]).forEach((sp) => {
     const all = state.animals.filter((a) => a.species === sp);
     const young = all.filter((a) => !isAdult(a, day));
-    const shown = Math.min(all.length, SHOW[sp]);
+    // More pasture, more of the herd on show; each animal keeps to one pen.
+    const shown = Math.min(all.length, SHOW[sp] * (sp === 'chicken' ? 1 : pens.length));
     // Keep the young in proportion: a herd half calves shows half calves.
     const youngShown = Math.min(young.length, Math.round((young.length / Math.max(all.length, 1)) * shown));
     for (let i = 0; i < shown; i++) {
@@ -179,7 +196,7 @@ export function MapLife({ state, view, fields }: { state: GameState; view: View_
       herd.push(
         <Wanderer
           key={`${sp}-${i}-${isYoung}`}
-          areas={sp === 'chicken' ? COOP_AREAS : PEN_AREAS}
+          areas={sp === 'chicken' ? COOP_AREAS : pens[i % pens.length]}
           view={view}
           size={size}
           speed={sp === 'chicken' ? 14 : 6}>
@@ -189,15 +206,16 @@ export function MapLife({ state, view, fields }: { state: GameState; view: View_
     }
   });
 
-  // Fish in the pond, up to six, in proportion to what swims there.
+  // Fish, up to six a pond, in proportion to what swims there, spread over the ponds.
   const fish: ReactNode[] = [];
   const total = state.pond.batches.reduce((n, b) => n + b.count, 0);
+  const room = 6 * ponds.length;
   state.pond.batches.forEach((b) => {
-    const n = Math.max(1, Math.round((b.count / total) * Math.min(total, 6)));
-    for (let i = 0; i < n && fish.length < 6; i++) {
+    const n = Math.max(1, Math.round((b.count / total) * Math.min(total, room)));
+    for (let i = 0; i < n && fish.length < room; i++) {
       const size = b.growth >= 1 ? 11 : 8;
       fish.push(
-        <Wanderer key={`${b.id}-${i}`} areas={POND_AREAS} view={view} size={size} speed={9}>
+        <Wanderer key={`${b.id}-${i}`} areas={ponds[fish.length % ponds.length]} view={view} size={size} speed={9}>
           <FishArt species={b.species} size={size * view.scale} />
         </Wanderer>,
       );

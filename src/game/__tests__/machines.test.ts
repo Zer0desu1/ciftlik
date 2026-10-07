@@ -109,11 +109,43 @@ describe('field machines', () => {
     advance(1);
     expect(S().fields.corn[0].crop).toBe('corn');
   });
+
+  it('the planter clears dead plants and sows them again', () => {
+    start({ inventory: { seed_corn: 5 }, fields: { ...initialState().fields, corn: field(plot('corn', 0.4, 0, { dead: true })) } });
+    own('planter');
+    advance(1);
+    expect(S().fields.corn[0]).toMatchObject({ crop: 'corn', dead: false, growth: expect.any(Number) });
+    expect(S().fields.corn[0].growth).toBeLessThan(0.2);
+  });
+
+  it('the planter sows plots never planted with what the field is for', () => {
+    start({ inventory: { seed_wheat: 3 }, fields: { ...initialState().fields, corn: field() } });
+    own('planter');
+    advance(1);
+    expect(S().fields.corn.filter((p) => p.crop === 'wheat')).toHaveLength(3);
+    expect(S().inventory.seed_wheat).toBe(0);
+  });
 });
 
 describe('animal machines', () => {
   it('the feeder feeds hungry animals at meal times, from the barn', () => {
     start({ minutes: 7 * 60, inventory: { hay: 20 }, animals: [animal('cow', { fullness: 30 })] });
+    own('feeder');
+    advance(1);
+    expect(S().animals[0].fullness).toBeGreaterThan(90);
+    expect(S().inventory.hay).toBe(20 - SPECIES.cow.ration);
+  });
+
+  it('the feeder serves the whole meal, so the meal counts as done', () => {
+    start({ minutes: 12 * 60 + 5, inventory: { hay: 20 }, animals: [animal('cow', { fullness: 70 }), animal('cow', { fullness: 20 })] });
+    own('feeder');
+    advance(0.5);
+    expect(S().animals.every((x) => x.fullness > 90)).toBe(true);
+    expect(S().meals.done[1]).toBe(true);
+  });
+
+  it('between meals the feeder still tops up anyone going hungry', () => {
+    start({ minutes: 9 * 60, meals: { day: 1, done: [true, false, false] }, inventory: { hay: 20 }, animals: [animal('cow', { fullness: 30 }), animal('cow', { fullness: 80 })] });
     own('feeder');
     advance(1);
     expect(S().animals[0].fullness).toBeGreaterThan(90);
@@ -176,7 +208,7 @@ describe('catching fish', () => {
 describe('old saves', () => {
   it('a version-3 save loads with no machines', () => {
     const s = migrate({ ...initialState(T0), version: 3, machines: undefined, warned: undefined }, 3);
-    expect(s.version).toBe(5);
+    expect(s.version).toBe(7);
     expect(s.machines).toEqual({});
     expect(s.warned).toEqual({});
   });

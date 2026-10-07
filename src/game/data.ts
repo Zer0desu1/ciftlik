@@ -130,19 +130,63 @@ export type FieldId = 'tomatoes' | 'vegetables' | 'corn' | 'east' | 'orchard' | 
  * A field. The first three come with the farm; the rest are parcels of land
  * around it, bought one by one (`land`), each a new field on the map.
  */
-export type FieldDef = { id: FieldId; name: string; plots: number; suggested: CropId[]; land?: { price: number; level: number } };
+/**
+ * A piece of land. The first three come with the farm; the rest are parcels
+ * around it, bought one by one (`land`). Any of them can be a field, a barn
+ * with pasture, a fish pond or a water tank (see LAND_USES); `name` is what it
+ * is called as a field, `place` names it as anything else ("Doğu Ahırı").
+ */
+export type FieldDef = { id: FieldId; name: string; place: string; plots: number; suggested: CropId[]; land?: { price: number; level: number } };
 
 export const FIELDS: FieldDef[] = [
-  { id: 'tomatoes', name: 'Domates Tarlası', plots: 8, suggested: ['tomato', 'pepper', 'strawberry'] },
-  { id: 'vegetables', name: 'Sebze Bahçesi', plots: 8, suggested: ['lettuce', 'carrot', 'pumpkin'] },
-  { id: 'corn', name: 'Mısır Tarlası', plots: 8, suggested: ['corn', 'wheat'] },
-  { id: 'east', name: 'Doğu Tarlası', plots: 8, suggested: ['wheat', 'corn'], land: { price: 300, level: 1 } },
-  { id: 'orchard', name: 'Çilek Bahçesi', plots: 8, suggested: ['strawberry', 'lettuce'], land: { price: 450, level: 2 } },
-  { id: 'meadow', name: 'Çayır Tarlası', plots: 8, suggested: ['carrot', 'pumpkin'], land: { price: 650, level: 3 } },
-  { id: 'south', name: 'Güney Tarlası', plots: 8, suggested: ['tomato', 'pepper'], land: { price: 850, level: 3 } },
-  { id: 'creek', name: 'Dere Kenarı', plots: 8, suggested: ['lettuce', 'carrot'], land: { price: 1100, level: 4 } },
-  { id: 'far', name: 'Uzak Tarla', plots: 8, suggested: ['pumpkin', 'corn'], land: { price: 1500, level: 5 } },
+  { id: 'tomatoes', name: 'Domates Tarlası', place: 'Kuzey', plots: 8, suggested: ['tomato', 'pepper', 'strawberry'] },
+  { id: 'vegetables', name: 'Sebze Bahçesi', place: 'Bahçe', plots: 8, suggested: ['lettuce', 'carrot', 'pumpkin'] },
+  { id: 'corn', name: 'Mısır Tarlası', place: 'Orta', plots: 8, suggested: ['corn', 'wheat'] },
+  { id: 'east', name: 'Doğu Tarlası', place: 'Doğu', plots: 8, suggested: ['wheat', 'corn'], land: { price: 300, level: 1 } },
+  { id: 'orchard', name: 'Çilek Bahçesi', place: 'Bayır', plots: 8, suggested: ['strawberry', 'lettuce'], land: { price: 450, level: 2 } },
+  { id: 'meadow', name: 'Çayır Tarlası', place: 'Çayır', plots: 8, suggested: ['carrot', 'pumpkin'], land: { price: 650, level: 3 } },
+  { id: 'south', name: 'Güney Tarlası', place: 'Güney', plots: 8, suggested: ['tomato', 'pepper'], land: { price: 850, level: 3 } },
+  { id: 'creek', name: 'Dere Kenarı', place: 'Dere', plots: 8, suggested: ['lettuce', 'carrot'], land: { price: 1100, level: 4 } },
+  { id: 'far', name: 'Uzak Tarla', place: 'Uzak', plots: 8, suggested: ['pumpkin', 'corn'], land: { price: 1500, level: 5 } },
 ];
+
+export type LandUse = 'field' | 'barn' | 'pond' | 'tank' | 'solar';
+
+/** What a piece of land can be made into, what that costs, and what it adds. */
+export const LAND_USES: Record<LandUse, { name: string; suffix: string; cost: number; level: number; adds: number; blurb: string }> = {
+  field: { name: 'Tarla', suffix: 'Tarlası', cost: 100, level: 1, adds: 8, blurb: '8 parsellik tarla' },
+  barn: { name: 'Ahır ve mera', suffix: 'Ahırı', cost: 400, level: 2, adds: 20, blurb: '+20 hayvanlık yer' },
+  pond: { name: 'Balık havuzu', suffix: 'Havuzu', cost: 300, level: 2, adds: 12, blurb: '+12 balıklık yer' },
+  tank: { name: 'Su deposu', suffix: 'Su Deposu', cost: 200, level: 1, adds: 1000, blurb: '+1.000 litre su' },
+  solar: { name: 'Güneş tarlası', suffix: 'Güneş Tarlası', cost: 600, level: 3, adds: 8, blurb: 'Öğlen 8 kWh/saat elektrik' },
+};
+
+/**
+ * Electricity. The house and every running machine draw power each game
+ * hour; panels and turbines make it. What the farm makes beyond its use is
+ * sold back to the grid, what it lacks is bought, and the day is settled at
+ * midnight: a bill to pay, or money in. A bill left unpaid stops the machines.
+ */
+export const POWER = {
+  /** The house's own use, kWh a game hour. */
+  house: 0.5,
+  /** Grid prices, coins a kWh. */
+  buy: 1,
+  sell: 0.5,
+  /** Roof panels: kWh an hour each at noon in full sun. */
+  panel: { price: 150, level: 1, max: 6, kwh: 1.5 },
+  /** Wind turbines: kWh an hour each in an ordinary breeze, day and night. */
+  turbine: { price: 350, level: 2, max: 3, kwh: 1 },
+};
+
+/** How much of the sun gets through, and how hard the wind blows, by weather. */
+export const SUN: Record<WeatherKind, number> = { sunny: 1, partly: 0.7, cloudy: 0.35, rain: 0.15, storm: 0.05 };
+export const WIND: Record<WeatherKind, number> = { sunny: 0.6, partly: 0.8, cloudy: 1, rain: 1.2, storm: 1.8 };
+
+/** What a piece of land is called given what is on it. */
+export function landName(def: FieldDef, use: LandUse): string {
+  return use === 'field' ? def.name : `${def.place} ${LAND_USES[use].suffix}`;
+}
 
 /** Dönüm a bought parcel adds to the farm. */
 export const LAND_AREA = 2.5;
@@ -326,6 +370,8 @@ export type Machine = {
   level: number;
   /** Where on the farm it works; the map shows it there. */
   zone: 'fields' | 'animals' | 'water';
+  /** Electricity it draws while switched on, in kWh a game hour. */
+  power: number;
 };
 
 /**
@@ -333,14 +379,14 @@ export type Machine = {
  * as long as they are switched on. Listed in the order a farm usually wants them.
  */
 export const MACHINES: Record<MachineId, Machine> = {
-  sprinkler: { id: 'sprinkler', name: 'Otomatik Sulama', does: 'Nemi %35’in altına düşen parselleri depodaki suyla sular.', price: 350, level: 2, zone: 'fields' },
-  feeder: { id: 'feeder', name: 'Otomatik Yemlik', does: 'Öğün saatlerinde aç hayvanları ambardaki yemle besler.', price: 400, level: 2, zone: 'animals' },
-  fish_feeder: { id: 'fish_feeder', name: 'Balık Yemleme Makinesi', does: 'Balıklar acıkınca havuza yem atar.', price: 250, level: 2, zone: 'water' },
-  cleaner: { id: 'cleaner', name: 'Temizlik Robotu', does: 'Ahır kirlenince temizler.', price: 300, level: 2, zone: 'animals' },
-  weeder: { id: 'weeder', name: 'Çapa Robotu', does: 'Tarlalardaki yabani otları ayıklar.', price: 220, level: 2, zone: 'fields' },
-  harvester: { id: 'harvester', name: 'Hasat Robotu', does: 'Olgunlaşan ürünleri toplayıp ambara taşır.', price: 500, level: 3, zone: 'fields' },
-  collector: { id: 'collector', name: 'Toplama Robotu', does: 'Süt, yumurta ve yünü hazır olunca toplar.', price: 450, level: 3, zone: 'animals' },
-  pond_filter: { id: 'pond_filter', name: 'Havuz Filtresi', does: 'Havuzun suyunu sürekli temiz tutar.', price: 300, level: 3, zone: 'water' },
-  solar_pump: { id: 'solar_pump', name: 'Güneş Enerjili Pompa', does: 'Gündüzleri su deposunu kendiliğinden doldurur.', price: 400, level: 3, zone: 'water' },
-  planter: { id: 'planter', name: 'Ekim Robotu', does: 'Hasat edilen parsele tohum varsa aynı ürünü yeniden eker.', price: 600, level: 4, zone: 'fields' },
+  sprinkler: { id: 'sprinkler', name: 'Otomatik Sulama', does: 'Nemi %35’in altına düşen parselleri depodaki suyla sular.', price: 350, level: 2, zone: 'fields', power: 0.3 },
+  feeder: { id: 'feeder', name: 'Otomatik Yemlik', does: 'Öğünlerde bütün hayvanları, arada acıkanları ambardaki yemle besler.', price: 400, level: 2, zone: 'animals', power: 0.3 },
+  fish_feeder: { id: 'fish_feeder', name: 'Balık Yemleme Makinesi', does: 'Balıklar acıkınca havuza yem atar.', price: 250, level: 2, zone: 'water', power: 0.2 },
+  cleaner: { id: 'cleaner', name: 'Temizlik Robotu', does: 'Ahır kirlenince temizler.', price: 300, level: 2, zone: 'animals', power: 0.4 },
+  weeder: { id: 'weeder', name: 'Çapa Robotu', does: 'Tarlalardaki yabani otları ayıklar.', price: 220, level: 2, zone: 'fields', power: 0.4 },
+  harvester: { id: 'harvester', name: 'Hasat Robotu', does: 'Olgunlaşan ürünleri toplayıp ambara taşır.', price: 500, level: 3, zone: 'fields', power: 0.6 },
+  collector: { id: 'collector', name: 'Toplama Robotu', does: 'Süt, yumurta ve yünü hazır olunca toplar.', price: 450, level: 3, zone: 'animals', power: 0.4 },
+  pond_filter: { id: 'pond_filter', name: 'Havuz Filtresi', does: 'Havuzun suyunu sürekli temiz tutar.', price: 300, level: 3, zone: 'water', power: 0.3 },
+  solar_pump: { id: 'solar_pump', name: 'Güneş Enerjili Pompa', does: 'Gündüzleri su deposunu kendiliğinden doldurur. Kendi panelinden beslenir.', price: 400, level: 3, zone: 'water', power: 0 },
+  planter: { id: 'planter', name: 'Ekim Robotu', does: 'Boşalan ya da kuruyan parsellere tohum varsa yeniden eker.', price: 600, level: 4, zone: 'fields', power: 0.5 },
 };

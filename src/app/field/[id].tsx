@@ -134,7 +134,7 @@ function SeedPicker({ field, onPick, onClose }: { field: FieldId; onPick: (crop:
 export default function FieldScreen() {
   const { id } = useLocalSearchParams<{ id: FieldId }>();
   const owned = useGame((s) => FIELDS.filter((f) => s.fields[f.id]?.length).map((f) => f.id).join(','));
-  const field: FieldId = owned.split(',').includes(id) ? id : 'tomatoes';
+  const field: FieldId = owned.split(',').includes(id) ? id : ((owned.split(',')[0] || 'tomatoes') as FieldId);
   const plots = useGame((s) => s.fields[field]);
   const tank = useGame((s) => s.tank);
   const cap = useGame(tankCapacity);

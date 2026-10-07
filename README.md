@@ -35,7 +35,12 @@ npm test           # oyun kurallarının testleri
   havuz 24 → 36 → 48 balık, su deposu 1000 → 1500 → 2000 litre. Her adımın altın bedeli ve
   seviye şartı var; çiftliğin dönümü büyüdükçe artar.
 - **Arazi:** Çiftliğin doğusunda ve güneyinde 6 satılık parsel var (300–1.500 altın, seviye 1–5).
-  Alınan her parsel haritada yeni bir alan ve 8 parsellik yeni bir tarla olur; o da genişletilebilir.
+  Her arazi (ilk üç tarla dahil) tarla, ahır ve mera (+20 hayvan), balık havuzu (+12 balık),
+  su deposu (+1.000 L) ya da güneş tarlası olabilir ve sonradan dönüştürülebilir. Haritada bir
+  araziye basılı tutup başka bir araziye dokununca ikisi her şeyiyle yer değiştirir.
+- **Elektrik:** Ev ve çalışan makineler elektrik harcar; güneş panelleri, rüzgâr türbinleri ve
+  güneş tarlaları üretir. Gece yarısı hesap kapanır: eksik 1 altın/kWh'den faturalanır, fazla
+  0,5 altın/kWh'den satılır. Ödenmeyen fatura ödenene kadar makineleri durdurur.
 - **Harita:** Sürüklenir, iki parmakla ya da fare tekerleğiyle yakınlaştırılır, +/− düğmeleri var.
   Hayvanlar, balıklar ve robotlar haritada dolaşır.
 - **Toplu işlem:** Hayvanlar ekranında "Seç" ile hayvanları işaretleyip hepsini birden sev,

@@ -20,6 +20,8 @@ const TIPS = [
   'Balıklar ancak tok ve su temizken büyür. Büyüyen balıklar havuzda yer varsa yavrular; tutup pazarda da satabilirsin.',
   'Pazar fiyatları her gün değişir. Ok yukarıyı gösteriyorsa bugün satmak için iyi gün.',
   'Seviye atladıkça yeni tohumlar, hayvanlar ve balıklar açılır.',
+  'Elektrik faturası her gece kesilir. Güneş paneli ve rüzgâr türbini kurarsan faturan düşer, fazlasını satarsın.',
+  'Haritada bir araziye basılı tut, sonra başka bir araziye dokun: ikisi yer değiştirir.',
   'Makineler ve robotlar işleri senin yerine yapar: sulama, çapa, hasat, ekim, yemleme, ürün toplama, temizlik ve su. Açıp kapatabilirsin.',
 ];
 

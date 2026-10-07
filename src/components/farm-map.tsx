@@ -4,9 +4,9 @@ import { Animated, Easing, PanResponder, Platform, Pressable, StyleSheet, View, 
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 import { MapLife } from '@/components/map-life';
-import { FIELDS, type CropId, type FieldId } from '@/game/data';
+import { FIELDS, landName, type CropId, type FieldId, type LandUse } from '@/game/data';
 import { plotStage } from '@/game/selectors';
-import { levelOf, ownsField, type GameState, type Plot } from '@/game/store';
+import { levelOf, ownsLand, type GameState, type Plot } from '@/game/store';
 import { C, F } from '@/theme';
 
 export type ZoneId = 'house' | FieldId | 'animals' | 'water' | 'storage';
@@ -74,9 +74,10 @@ function viewFor(zone: ZoneId): ViewBox {
   return { x: z.x + z.w / 2 - size / 2, y: z.y + z.h / 2 - size / 2, size };
 }
 
-function Label({ zone, active }: { zone: ZoneId; active: boolean }) {
+function Label({ zone, active, text }: { zone: ZoneId; active: boolean; text?: string }) {
   const z = ZONES[zone];
-  const w = z.label.length * 6.2 + 18;
+  const label = text ?? z.label;
+  const w = label.length * 6.2 + 18;
   const x = z.x + z.w / 2 - w / 2;
   return (
     <G>
@@ -89,7 +90,7 @@ function Label({ zone, active }: { zone: ZoneId; active: boolean }) {
         fontWeight="600"
         fill={active ? '#FFFFFF' : '#1C2A20'}
         textAnchor="middle">
-        {z.label}
+        {label}
       </SvgText>
     </G>
   );
@@ -174,7 +175,83 @@ function ForSale({ zone, price, level, locked }: { zone: FieldId; price: number;
   );
 }
 
-function House() {
+/** Land given over to more animals: pasture behind a fence, a small barn and hay. */
+function PasturePatch({ zone }: { zone: FieldId }) {
+  const z = ZONES[zone];
+  return (
+    <G>
+      <Rect x={z.x} y={z.y} width={z.w} height={z.h} rx={12} fill="#B4DD95" />
+      <Rect x={z.x + 6} y={z.y + 26} width={z.w - 12} height={z.h - 32} rx={8} fill="none" stroke="#8C6A45" strokeWidth={1.4} strokeDasharray="4 3" />
+      <Rect x={z.x + 12} y={z.y + 32} width={30} height={22} rx={2} fill="#B9473A" />
+      <Path d={`M${z.x + 10} ${z.y + 33} L${z.x + 27} ${z.y + 25} L${z.x + 44} ${z.y + 33}`} fill="#8E3329" />
+      <Rect x={z.x + 22} y={z.y + 42} width={10} height={12} fill="#7B2C22" />
+      <Circle cx={z.x + 22} cy={z.y + z.h - 18} r={7} fill="#E3C063" />
+      <Circle cx={z.x + 22} cy={z.y + z.h - 18} r={4} fill="#C9A13E" />
+      <Rect x={z.x + z.w - 40} y={z.y + z.h - 22} width={26} height={8} rx={3} fill="#8C6A45" />
+    </G>
+  );
+}
+
+/** Land given over to more fish: a second pond. */
+function PondPatch({ zone }: { zone: FieldId }) {
+  const z = ZONES[zone];
+  const cx = z.x + z.w / 2;
+  const cy = z.y + z.h / 2 + 10;
+  return (
+    <G>
+      <Rect x={z.x} y={z.y} width={z.w} height={z.h} rx={12} fill="#A8D58F" />
+      <Ellipse cx={cx} cy={cy} rx={z.w / 2 - 18} ry={z.h / 2 - 22} fill="#58A9DE" />
+      <Ellipse cx={cx} cy={cy} rx={z.w / 2 - 18} ry={z.h / 2 - 22} fill="none" stroke="#8CCB74" strokeWidth={3} />
+      <Ellipse cx={cx - 10} cy={cy - 4} rx={z.w / 4} ry={z.h / 8} fill="#4F9BD0" opacity={0.5} />
+      <Path d={`M${z.x + z.w - 22} ${z.y + z.h - 14} l3 -9 l2 9 m3 0 l2 -7`} stroke="#4C7A2A" strokeWidth={1.4} fill="none" />
+      <Path d={`M${z.x + 14} ${z.y + 40} l3 -9 l2 9`} stroke="#4C7A2A" strokeWidth={1.4} fill="none" />
+    </G>
+  );
+}
+
+/** Land given over to water: two tanks and a pipe to the farm. */
+function TankPatch({ zone, level }: { zone: FieldId; level: number }) {
+  const z = ZONES[zone];
+  const cy = z.y + z.h / 2 + 12;
+  return (
+    <G>
+      <Rect x={z.x} y={z.y} width={z.w} height={z.h} rx={12} fill="#C9DDB4" />
+      <Rect x={z.x + 10} y={cy - 2} width={z.w - 20} height={4} fill="#8B9AA6" />
+      {[0.3, 0.7].map((fx) => (
+        <G key={fx}>
+          <Circle cx={z.x + z.w * fx} cy={cy} r={24} fill="#CBD6DE" />
+          <Circle cx={z.x + z.w * fx} cy={cy} r={20} fill="#3D7FB8" opacity={0.25 + level * 0.75} />
+          <Circle cx={z.x + z.w * fx - 6} cy={cy - 6} r={6} fill="#ffffff55" />
+        </G>
+      ))}
+    </G>
+  );
+}
+
+/** Land given over to sunlight: rows of panels. */
+function SolarPatch({ zone }: { zone: FieldId }) {
+  const z = ZONES[zone];
+  const cols = Math.floor((z.w - 16) / 26);
+  const rows = Math.floor((z.h - 36) / 20);
+  const left = z.x + (z.w - cols * 26 + 4) / 2;
+  return (
+    <G>
+      <Rect x={z.x} y={z.y} width={z.w} height={z.h} rx={12} fill="#CFE0B8" />
+      {Array.from({ length: rows * cols }).map((_, i) => {
+        const x = left + (i % cols) * 26;
+        const y = z.y + 30 + Math.floor(i / cols) * 20;
+        return (
+          <G key={i}>
+            <Rect x={x} y={y} width={22} height={15} rx={2} fill="#2F4F7A" />
+            <Path d={`M${x + 7.3} ${y} V${y + 15} M${x + 14.6} ${y} V${y + 15} M${x} ${y + 7.5} H${x + 22}`} stroke="#6E8FBF" strokeWidth={0.8} />
+          </G>
+        );
+      })}
+    </G>
+  );
+}
+
+function House({ panels, turbines }: { panels: number; turbines: number }) {
   const z = ZONES.house;
   return (
     <G>
@@ -188,6 +265,22 @@ function House() {
       {[0, 1, 2, 3].map((k) => (
         <Circle key={k} cx={z.x + 21 + k * 6} cy={z.y + 89} r={2} fill={['#E04F5F', '#F2C94C', '#9B59B6', '#F2994A'][k]} />
       ))}
+      {/* Roof panels, two rows of three. */}
+      {Array.from({ length: panels }).map((_, i) => (
+        <Rect key={i} x={z.x + 27 + (i % 3) * 14} y={z.y + 43 + Math.floor(i / 3) * 7} width={12} height={6} rx={1} fill="#2F4F7A" stroke="#6E8FBF" strokeWidth={0.6} />
+      ))}
+      {/* Turbines along the side of the plot. */}
+      {Array.from({ length: turbines }).map((_, i) => {
+        const tx = z.x + 92 - i * 10;
+        const ty = z.y + 44 + i * 12;
+        return (
+          <G key={i}>
+            <Path d={`M${tx} ${ty} V${ty + 24}`} stroke="#E6E9EC" strokeWidth={2} />
+            <Path d={`M${tx} ${ty} l0 -9 M${tx} ${ty} l8 5 M${tx} ${ty} l-8 5`} stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
+            <Circle cx={tx} cy={ty} r={1.8} fill="#9AA3AC" />
+          </G>
+        );
+      })}
       <Circle cx={z.x + 14} cy={z.y + 36} r={7} fill="#3E8A57" />
       <Circle cx={z.x + 92} cy={z.y + 36} r={8} fill="#3E8A57" />
       <Circle cx={z.x + 96} cy={z.y + 96} r={6} fill="#3E8A57" />
@@ -373,17 +466,25 @@ export function FarmMap({
   state,
   selected,
   onSelect,
+  onHold,
+  moving,
   size,
 }: {
   state: GameState;
   selected: ZoneId | null;
   onSelect: (zone: ZoneId) => void;
+  /** A long press on a zone: picks a piece of land up, to move it. */
+  onHold?: (zone: ZoneId) => void;
+  /** The land being moved, if any: the other land is where it can go. */
+  moving?: FieldId | null;
   size: number;
 }) {
   const fish = state.pond.batches.reduce((n, b) => n + b.count, 0);
   const level = levelOf(state.xp);
-  const owned = FIELDS.filter((f) => ownsField(state, f.id)).map((f) => f.id);
+  const owned = FIELDS.filter((f) => ownsLand(state, f.id)).map((f) => f.id);
   const ownedKey = owned.join(',');
+  // What each piece of land is, so the moving layer knows where the herd, fish and robots go.
+  const landKey = owned.map((f) => `${f}:${state.land[f]}`).join(',');
   // Drawn at one pixel scale; zooming scales the drawing as a whole.
   const k = size / 360;
   const minZoom = Math.min(size / (WORLD.w * k), size / (WORLD.h * k));
@@ -442,12 +543,24 @@ export function FarmMap({
 
           {zones.map((zone) => {
             const field = FIELDS.find((f) => f.id === zone);
-            const land = field?.land && !ownsField(state, field.id) ? field.land : null;
+            const use: LandUse | undefined = field ? state.land[field.id] : undefined;
+            const land = field?.land && !use ? field.land : null;
+            const target = moving && field && use && field.id !== moving;
             return (
               <G key={zone}>
-                {zone === 'house' ? <House /> : null}
-                {field && !land ? <FieldPatch zone={field.id} plots={state.fields[field.id]} /> : null}
+                {zone === 'house' ? <House panels={state.power.panels} turbines={state.power.turbines} /> : null}
+                {field && use === 'field' ? <FieldPatch zone={field.id} plots={state.fields[field.id]} /> : null}
+                {field && use === 'barn' ? <PasturePatch zone={field.id} /> : null}
+                {field && use === 'pond' ? <PondPatch zone={field.id} /> : null}
+                {field && use === 'tank' ? <TankPatch zone={field.id} level={Math.min(1, state.tank / 2000)} /> : null}
+                {field && use === 'solar' ? <SolarPatch zone={field.id} /> : null}
                 {field && land ? <ForSale zone={field.id} price={land.price} level={land.level} locked={land.level > level} /> : null}
+                {moving === zone ? (
+                  <Rect x={ZONES[zone].x - 2} y={ZONES[zone].y - 2} width={ZONES[zone].w + 4} height={ZONES[zone].h + 4} rx={14} fill="#F2C94C33" stroke="#D08A12" strokeWidth={3} strokeDasharray="7 5" />
+                ) : null}
+                {target ? (
+                  <Rect x={ZONES[zone].x + 1} y={ZONES[zone].y + 1} width={ZONES[zone].w - 2} height={ZONES[zone].h - 2} rx={12} fill="#FFFFFF33" stroke="#1F5C3A" strokeWidth={1.5} strokeDasharray="4 4" />
+                ) : null}
                 {zone === 'animals' ? <Animals /> : null}
                 {zone === 'water' ? <Water tank={state.tank} fish={fish} /> : null}
                 {zone === 'storage' ? <Storage /> : null}
@@ -463,7 +576,7 @@ export function FarmMap({
                     strokeWidth={2.5}
                   />
                 ) : null}
-                <Label zone={zone} active={selected === zone} />
+                <Label zone={zone} active={selected === zone} text={field && use ? landName(field, use) : undefined} />
               </G>
             );
           })}
@@ -471,7 +584,7 @@ export function FarmMap({
           <Circle cx={149} cy={124} r={2.4} fill="#333" />
           <Circle cx={159} cy={124} r={2.4} fill="#333" />
         </Svg>
-        <MapLife key={`${k}-${ownedKey}`} state={state} view={{ x: 0, y: 0, scale: k }} fields={owned} />
+        <MapLife key={`${k}-${landKey}`} state={state} view={{ x: 0, y: 0, scale: k }} land={landKey} />
         {/* Touch targets laid over the drawing, one per zone. Kept out of the
             SVG: press handlers on SVG groups leak the native responder props
             onto web DOM elements. */}
@@ -483,6 +596,8 @@ export function FarmMap({
               accessibilityRole="button"
               accessibilityLabel={z.label}
               onPress={() => camera.isTap() && onSelect(zone)}
+              onLongPress={() => camera.isTap() && onHold?.(zone)}
+              delayLongPress={450}
               style={{ position: 'absolute', left: z.x * k, top: z.y * k, width: z.w * k, height: z.h * k }}
             />
           );
@@ -510,7 +625,7 @@ const ROADS = 'M116 0 V360 M0 116 H560 M188 228 V480 M0 228 H560 M364 0 V480 M0 
 const WEB_NO_SCROLL = (Platform.OS === 'web' ? { touchAction: 'none', cursor: 'grab' } : {}) as object;
 
 const styles = StyleSheet.create({
-  zoom: { position: 'absolute', right: 8, top: 8, gap: 6 },
+  zoom: { position: 'absolute', right: 8, bottom: 8, gap: 6 },
   zoomBtn: {
     width: 32,
     height: 32,
