@@ -1,56 +1,48 @@
-# Welcome to your Expo app 👋
+# Çiftliğim
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Kuşbakışı bir çiftliği yönettiğin bir mobil oyun: ek, sula, hasat et; hayvanları
+besle ve ürünlerini topla; balık havuzunu besle ve balık tut; ürünlerini pazarda sat.
 
-## Get started
+Expo (SDK 57) + React Native + TypeScript. iOS, Android ve web'de çalışır.
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Çalıştırma
 
 ```bash
-npm run reset-project
+npm install
+npx expo start     # telefonda Expo Go ile QR kodu okut
+npm run web        # tarayıcıda aç
+npm test           # oyun kurallarının testleri
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Nasıl çalışır
 
-### Other setup steps
+- **Zaman:** 1 gerçek dakika = 1 oyun saati; bir gün 24 dakika. Uygulama kapalıyken
+  de zaman işler (en fazla 48 oyun saati telafi edilir).
+- **Tarlalar:** Bitkiler toprak nemliyken büyür. Kuruyan bitki ölür, toplanmayan ürün
+  çürür. Yabani ot büyümeyi yavaşlatır, gübre hızlandırır ve hasadı artırır.
+- **Hayvanlar:** 06:00, 12:00 ve 18:00 öğünleri. Tok ve sağlıklı hayvan süt, yumurta,
+  yün ya da keçi sütü verir. Kirli ahır ve açlık sağlığı bozar.
+- **Üreme:** Tok ve sağlıklı iki yetişkin inek, koyun ya da keçi varsa zamanla biri gebe kalır
+  (inek 48, koyun/keçi 36 oyun saati) ve yavru doğurur. Tavuk yumurtaları kuluçkada 24 saatte
+  civcive döner. Yavrular büyüyünce (1–3 oyun günü) üretmeye başlar. Ahır sınırı 40 hayvan.
+- **Ölüm:** Sağlığı sıfıra inen hayvan 12 saat içinde ilaç ve yem almazsa ölür (önce uyarı gelir).
+  Yaşlanan hayvan daha az üretir ve ömrünü doldurunca ölebilir.
+- **Balık havuzu:** Balıklar tok ve su temizken büyür; büyüyenler havuzda yer varsa yavrular.
+  Bulanık suda balık ölebilir.
+- **Büyütme:** Her tarla 8 parselden 12'ye, sonra 16'ya genişler. Ahır 40 → 60 → 80 hayvan,
+  havuz 24 → 36 → 48 balık, su deposu 1000 → 1500 → 2000 litre. Her adımın altın bedeli ve
+  seviye şartı var; çiftliğin dönümü büyüdükçe artar.
+- **Makineler:** 10 makine ve robot (otomatik sulama, çapa, hasat ve ekim robotları, otomatik
+  yemlik, toplama ve temizlik robotları, balık yemleme makinesi, havuz filtresi, güneş enerjili
+  pompa) bir kez alınır ve açık kaldıkça işini kendisi yapar; yemi, tohumu ve suyu stoktan kullanır.
+- **Pazar:** Fiyatlar her gün değişir. Seviye atladıkça yeni tohum, hayvan ve balıklar açılır.
+- **Hava:** Her gün yeni hava; yağmur tarlaları sular, su deposunu ve havuzu doldurur.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Kod
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- `src/game/` — oyunun kuralları: veri (`data.ts`), saat ve hava (`clock.ts`),
+  durum ve eylemler (`store.ts`, zustand + AsyncStorage), türetilmiş değerler (`selectors.ts`)
+- `src/app/` — ekranlar (Expo Router)
+- `src/components/art/` — tüm çizimler (react-native-svg)
+- `src/components/farm-map.tsx` — kuşbakışı çiftlik haritası
+- `src/theme.ts` — renkler, yazı tipi ve boşluklar
