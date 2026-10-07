@@ -228,6 +228,27 @@ function TankPatch({ zone, level }: { zone: FieldId; level: number }) {
   );
 }
 
+/** Land bought but not yet put to any use: mown grass, waiting. */
+function EmptyPatch({ zone }: { zone: FieldId }) {
+  const z = ZONES[zone];
+  const cx = z.x + z.w / 2;
+  const cy = z.y + z.h / 2 + 10;
+  return (
+    <G>
+      <Rect x={z.x} y={z.y} width={z.w} height={z.h} rx={12} fill="#C3DDA4" />
+      <Rect x={z.x + 6} y={z.y + 26} width={z.w - 12} height={z.h - 32} rx={8} fill="none" stroke="#9DBB7C" strokeWidth={1.2} strokeDasharray="5 5" />
+      {[0.2, 0.42, 0.7, 0.85].map((fx, i) => (
+        <Path key={i} d={`M${z.x + z.w * fx} ${z.y + z.h * (i % 2 ? 0.8 : 0.5)} l2 -5 l2 5`} stroke="#93B572" strokeWidth={1.2} fill="none" />
+      ))}
+      <Rect x={cx - 1.5} y={cy} width={3} height={14} fill="#8A6A44" />
+      <Rect x={cx - 34} y={cy - 12} width={68} height={20} rx={6} fill="#FFFFFF" stroke="#C9B48E" />
+      <SvgText x={cx} y={cy + 2} fontSize={9.5} fontFamily={F.bold} fontWeight="700" fill="#1F5C3A" textAnchor="middle">
+        Ne olsun?
+      </SvgText>
+    </G>
+  );
+}
+
 /** Land given over to sunlight: rows of panels. */
 function SolarPatch({ zone }: { zone: FieldId }) {
   const z = ZONES[zone];
@@ -554,6 +575,7 @@ export function FarmMap({
                 {field && use === 'pond' ? <PondPatch zone={field.id} /> : null}
                 {field && use === 'tank' ? <TankPatch zone={field.id} level={Math.min(1, state.tank / 2000)} /> : null}
                 {field && use === 'solar' ? <SolarPatch zone={field.id} /> : null}
+                {field && use === 'empty' ? <EmptyPatch zone={field.id} /> : null}
                 {field && land ? <ForSale zone={field.id} price={land.price} level={land.level} locked={land.level > level} /> : null}
                 {moving === zone ? (
                   <Rect x={ZONES[zone].x - 2} y={ZONES[zone].y - 2} width={ZONES[zone].w + 4} height={ZONES[zone].h + 4} rx={14} fill="#F2C94C33" stroke="#D08A12" strokeWidth={3} strokeDasharray="7 5" />

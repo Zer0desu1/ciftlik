@@ -4,7 +4,7 @@ import { View } from 'react-native';
 
 import { CoinIcon } from '@/components/art/items';
 import { Button, Card, IconBadge, Pill, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
-import { BASE_PLOTS, FACILITIES, FIELD_EXPANSIONS, FIELDS, LAND_AREA, type FacilityId, type FieldId } from '@/game/data';
+import { FACILITIES, FIELD_EXPANSIONS, FIELDS, LAND_AREA, type FacilityId, type FieldId } from '@/game/data';
 import { capacity, farmArea, fieldLevel, levelOf, ownsField, ownsLand, useGame } from '@/game/store';
 import { C, S } from '@/theme';
 
@@ -107,7 +107,7 @@ export default function UpgradesScreen() {
         </Txt>
       </Card>
 
-      <SectionHeader title="Arazi" subtitle="Tarla olarak gelir; haritada araziye dokunup ahıra, havuza ya da su deposuna çevirebilirsin" />
+      <SectionHeader title="Arazi" subtitle="Boş gelir; haritada araziye dokunup tarla, ahır, havuz, su deposu ya da güneş tarlası yap" />
       {FIELDS.filter((f) => f.land && !ownsLand(state, f.id)).map((f) => (
         <UpgradeCard
           key={f.id}
@@ -115,7 +115,7 @@ export default function UpgradesScreen() {
           tint={C.amberSoft}
           title={f.name}
           now="Satılık arazi"
-          next={`${BASE_PLOTS} parsellik tarla · +${LAND_AREA.toLocaleString('tr-TR')} dönüm`}
+          next={`Boş arazi · +${LAND_AREA.toLocaleString('tr-TR')} dönüm`}
           done={0}
           total={1}
           step={{ cost: f.land!.price, level: f.land!.level }}

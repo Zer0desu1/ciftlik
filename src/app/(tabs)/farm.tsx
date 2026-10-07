@@ -1,5 +1,5 @@
 import { router, type Href } from 'expo-router';
-import { ArrowRight, Bot, Droplets, Fish, Hand, Home, Lock, Map, Maximize2, Move, Package, PawPrint, Sprout, Sun, Wheat, Zap } from 'lucide-react-native';
+import { ArrowRight, Bot, Droplets, Fish, Hand, Home, Lock, Map, Maximize2, Move, Package, PawPrint, Shovel, Sprout, Sun, Wheat, Zap } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,27 +47,38 @@ function LandCard({ field, state }: { field: FieldId; state: GameState }) {
         </View>
       </Row>
       <Txt v="body">
-        Ne olacağını sen seç: {BASE_PLOTS} parsellik tarla, ahır ve mera, balık havuzu ya da su deposu. Sonra da istediğin zaman
-        değiştirebilirsin.
+        Boş arazi olarak al, sonra ne olacağına sen karar ver: {BASE_PLOTS} parsellik tarla, ahır ve mera, balık havuzu, su deposu ya da
+        güneş tarlası. İstersen hazır kurulu da alabilirsin.
       </Txt>
       {locked ? (
         <Button label={`Seviye ${land.level} gerekli`} icon={<Lock size={16} color={C.white} />} onPress={() => {}} disabled />
       ) : (
         <View style={{ gap: S.sm }}>
-          {USES.map((use, i) => {
-            const price = landPrice(field, use);
-            const needs = LAND_USES[use].level > level;
-            return (
-              <Button
-                key={use}
-                kind={i === 0 ? 'primary' : 'soft'}
-                label={needs ? `${LAND_USES[use].name} · seviye ${LAND_USES[use].level}` : `${LAND_USES[use].name} olarak al · ${price} altın`}
-                icon={<UseIcon use={use} color={i === 0 ? C.white : C.green} />}
-                onPress={() => buyLand(field, use)}
-                disabled={needs || state.coins < price}
-              />
-            );
-          })}
+          <Button
+            label={`Satın al · ${land.price} altın`}
+            icon={<Map size={16} color={C.white} />}
+            onPress={() => buyLand(field, 'empty')}
+            disabled={state.coins < land.price}
+          />
+          <Txt v="caption">ya da hazır kurulu al:</Txt>
+          <Row gap={S.sm} style={{ flexWrap: 'wrap' }}>
+            {USES.filter((u) => u !== 'empty').map((use) => {
+              const price = landPrice(field, use);
+              const needs = LAND_USES[use].level > level;
+              return (
+                <Button
+                  key={use}
+                  small
+                  kind="soft"
+                  label={needs ? `${LAND_USES[use].name} · Sv. ${LAND_USES[use].level}` : `${LAND_USES[use].name} · ${price}`}
+                  icon={<UseIcon use={use} color={C.green} />}
+                  onPress={() => buyLand(field, use)}
+                  disabled={needs || state.coins < price}
+                  style={{ flexGrow: 1 }}
+                />
+              );
+            })}
+          </Row>
         </View>
       )}
     </Card>
@@ -79,6 +90,7 @@ function UseIcon({ use, color }: { use: LandUse; color: string }) {
   if (use === 'barn') return <PawPrint size={16} color={color} />;
   if (use === 'pond') return <Fish size={16} color={color} />;
   if (use === 'solar') return <Sun size={16} color={color} />;
+  if (use === 'empty') return <Shovel size={16} color={color} />;
   return <Droplets size={16} color={color} />;
 }
 
@@ -87,27 +99,57 @@ function ConvertCard({ field, state, onMove }: { field: FieldId; state: GameStat
   const use = state.land[field]!;
   const level = levelOf(state.xp);
   const { convertLand } = useGame.getState();
+  // A field with crops on it asks once before digging them up.
+  const [asking, setAsking] = useState<LandUse | null>(null);
+  const growing = use === 'field' ? state.fields[field].filter((p) => p.crop && !p.dead).length : 0;
+  const pick = (u: LandUse) => (growing ? setAsking(u) : convertLand(field, u));
   return (
     <Card style={{ gap: S.sm }}>
-      <Txt v="label">Bu araziyi değiştir</Txt>
-      <Txt v="caption">Ekin, hayvan ya da balık varsa önce onlara yer açılması gerekir.</Txt>
-      <Row gap={S.sm} style={{ flexWrap: 'wrap' }}>
-        {USES.filter((u) => u !== use).map((u) => {
-          const needs = LAND_USES[u].level > level;
-          return (
+      <Txt v="label">{use === 'empty' ? 'Bu arazi ne olsun?' : 'Bu araziyi değiştir'}</Txt>
+      <Txt v="caption">
+        {use === 'field'
+          ? 'Tarlayı bozup başka bir şey yapabilirsin. Üzerindeki ekinler sökülür.'
+          : 'Hayvanlar ya da balıklar varsa önce kalan yere sığmaları gerekir.'}
+      </Txt>
+      {asking ? (
+        <View style={{ gap: S.sm }}>
+          <Txt v="body" style={{ color: C.rose }}>
+            {growing} ekin sökülecek ve kaybolacak. {defOf(field).name}, {LAND_USES[asking].name.toLowerCase()} olsun mu?
+          </Txt>
+          <Row gap={S.sm}>
+            <Button small kind="ghost" label="Vazgeç" onPress={() => setAsking(null)} style={{ flex: 1 }} />
             <Button
-              key={u}
               small
-              kind="soft"
-              label={needs ? `${LAND_USES[u].name} · Sv. ${LAND_USES[u].level}` : `${LAND_USES[u].name} · ${LAND_USES[u].cost}`}
-              icon={<UseIcon use={u} color={C.green} />}
-              onPress={() => convertLand(field, u)}
-              disabled={needs || state.coins < LAND_USES[u].cost}
-              style={{ flexGrow: 1 }}
+              kind="danger"
+              label="Tarlayı boz"
+              onPress={() => {
+                convertLand(field, asking, true);
+                setAsking(null);
+              }}
+              style={{ flex: 1 }}
             />
-          );
-        })}
-      </Row>
+          </Row>
+        </View>
+      ) : (
+        <Row gap={S.sm} style={{ flexWrap: 'wrap' }}>
+          {USES.filter((u) => u !== use).map((u) => {
+            const needs = LAND_USES[u].level > level;
+            const cost = LAND_USES[u].cost;
+            return (
+              <Button
+                key={u}
+                small
+                kind="soft"
+                label={needs ? `${LAND_USES[u].name} · Sv. ${LAND_USES[u].level}` : u === 'empty' ? (use === 'field' ? 'Tarlayı boz' : 'Boşalt') : `${LAND_USES[u].name} · ${cost}`}
+                icon={<UseIcon use={u} color={C.green} />}
+                onPress={() => pick(u)}
+                disabled={needs || state.coins < cost}
+                style={{ flexGrow: 1 }}
+              />
+            );
+          })}
+        </Row>
+      )}
       <Button small kind="ghost" label="Yerini değiştir" icon={<Move size={14} color={C.green} />} onPress={onMove} />
     </Card>
   );
@@ -116,13 +158,26 @@ function ConvertCard({ field, state, onMove }: { field: FieldId; state: GameStat
 /** Land used for something other than a field: what it adds to the farm. */
 function UseCard({ field, state }: { field: FieldId; state: GameState }) {
   const use = state.land[field]!;
-  const go: Record<Exclude<LandUse, 'field'>, { label: string; href: Href; now: string }> = {
+  if (use === 'empty') {
+    return (
+      <Card style={{ gap: S.sm }}>
+        <Row>
+          <IconBadge tint={C.amberSoft}><UseIcon use="empty" color={C.amber} /></IconBadge>
+          <View style={{ flex: 1 }}>
+            <Txt v="heading">{landName(defOf(field), use)}</Txt>
+            <Txt v="caption">Boş arazi · aşağıdan ne olacağını seç</Txt>
+          </View>
+        </Row>
+      </Card>
+    );
+  }
+  const go: Record<Exclude<LandUse, 'field' | 'empty'>, { label: string; href: Href; now: string }> = {
     barn: { label: 'Hayvanlara git', href: '/livestock', now: `Ahırda ${state.animals.length} / ${barnCapacity(state)} hayvan` },
     pond: { label: 'Havuza git', href: '/pond', now: `Havuzda ${state.pond.batches.reduce((n, b) => n + b.count, 0)} / ${pondCapacity(state)} balık` },
     tank: { label: 'Suya git', href: '/water', now: `Depoda ${Math.round(state.tank)} / ${tankCapacity(state)} L su` },
     solar: { label: 'Elektriğe git', href: '/power', now: `Çiftlik şu an ${powerMade(state).toFixed(1)} kWh/sa üretiyor` },
   };
-  const g = go[use as Exclude<LandUse, 'field'>];
+  const g = go[use as Exclude<LandUse, 'field' | 'empty'>];
   return (
     <Card style={{ gap: S.md }}>
       <Row>

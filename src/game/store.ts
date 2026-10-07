@@ -176,7 +176,8 @@ type Actions = {
   buyLand: (field: FieldId, use?: LandUse) => void;
   buyPower: (kind: 'panel' | 'turbine') => void;
   payBill: () => void;
-  convertLand: (field: FieldId, to: LandUse) => void;
+  /** `destroy` digs up whatever grows on a field rather than refusing. */
+  convertLand: (field: FieldId, to: LandUse, destroy?: boolean) => void;
   swapLand: (a: FieldId, b: FieldId) => void;
   upgrade: (facility: FacilityId) => void;
   sellAnimal: (id: string) => void;
@@ -1002,7 +1003,7 @@ export const useGame = create<Store>()(
 
       expandField: (field) =>
         update(set, (d) => {
-          if (!ownsField(d, field)) return note(d, 'Önce bu araziyi satın al.', 'bad');
+          if (!ownsField(d, field)) return note(d, ownsLand(d, field) ? 'Bu arazi tarla değil.' : 'Önce bu araziyi satın al.', 'bad');
           const step = FIELD_EXPANSIONS[fieldLevel(d, field)];
           if (!step) return note(d, 'Bu tarla en büyük hâlinde.', 'info');
           if (step.level > levelOf(d.xp)) return note(d, `Genişletmek için seviye ${step.level} gerekli.`, 'bad');
@@ -1014,7 +1015,7 @@ export const useGame = create<Store>()(
           note(d, `${FIELDS.find((f) => f.id === field)!.name} genişledi: ${d.fields[field].length} parsel.`, 'good');
         }),
 
-      buyLand: (field, use = 'field') =>
+      buyLand: (field, use = 'empty') =>
         update(set, (d) => {
           const def = FIELDS.find((f) => f.id === field)!;
           if (!def.land || ownsLand(d, field)) return;
@@ -1027,11 +1028,13 @@ export const useGame = create<Store>()(
           d.land[field] = use;
           d.fields[field] = use === 'field' ? Array.from({ length: def.plots }, emptyPlot) : [];
           gainXp(d, 15);
-          note(
-            d,
-            use === 'field' ? `${def.name} senin! ${def.plots} yeni parsel ekime hazır.` : `${landName(def, use)} hazır: ${LAND_USES[use].blurb}.`,
-            'good',
-          );
+          const what =
+            use === 'empty'
+              ? 'Ne olacağını seçmek için haritada araziye dokun.'
+              : use === 'field'
+                ? `${def.plots} yeni parsel ekime hazır.`
+                : `${LAND_USES[use].blurb}.`;
+          note(d, `${landName(def, use)} senin! ${what}`, 'good');
         }),
 
       buyPower: (kind) =>
@@ -1060,7 +1063,7 @@ export const useGame = create<Store>()(
           note(d, 'Fatura ödendi, makineler yeniden çalışıyor.', 'good');
         }),
 
-      convertLand: (field, to) =>
+      convertLand: (field, to, destroy = false) =>
         update(set, (d) => {
           const def = FIELDS.find((f) => f.id === field)!;
           const from = d.land[field];
@@ -1069,9 +1072,8 @@ export const useGame = create<Store>()(
           if (use.level > levelOf(d.xp)) return note(d, `${use.name} için seviye ${use.level} gerekli.`, 'bad');
           if (d.coins < use.cost) return note(d, 'Yeterli paran yok.', 'bad');
           // What is on the land now has to go somewhere first.
-          if (from === 'field' && d.fields[field].some((p) => p.crop && !p.dead)) {
-            return note(d, `${def.name} üzerinde ekin var: önce hasat et ya da boşalt.`, 'bad');
-          }
+          const growing = from === 'field' ? d.fields[field].filter((p) => p.crop && !p.dead).length : 0;
+          if (growing && !destroy) return note(d, `${def.name} üzerinde ${growing} ekin var: hasat et ya da tarlayı boz.`, 'bad');
           if (from === 'barn') {
             const left = barnCapacity(d) - LAND_USES.barn.adds;
             const herd = d.animals.length + d.incubator.reduce((n, t) => n + t.eggs, 0);
@@ -1089,7 +1091,7 @@ export const useGame = create<Store>()(
           d.fields[field] = to === 'field' ? Array.from({ length: def.plots }, emptyPlot) : [];
           d.tank = Math.min(d.tank, tankCapacity(d));
           gainXp(d, 5);
-          note(d, `${fromName} artık ${landName(def, to)}.`, 'good');
+          note(d, `${fromName} artık ${landName(def, to)}.${growing ? ` ${growing} ekin söküldü.` : ''}`, 'good');
         }),
 
       swapLand: (a, b) =>

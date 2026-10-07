@@ -147,10 +147,24 @@ describe('land', () => {
     expect(FIELDS.filter((f) => f.land).every((f) => S().fields[f.id].length === 0)).toBe(true);
   });
 
-  it('buying a parcel makes it a field of empty plots, ready to plant, and grows the farm', () => {
+  it('a parcel comes as empty land, to be made into whatever is wanted', () => {
     start({ coins: east.land!.price });
     const area = farmArea(S());
     S().buyLand('east');
+    expect(S().coins).toBe(0);
+    expect(S().land.east).toBe('empty');
+    expect(S().fields.east).toEqual([]);
+    expect(farmArea(S())).toBe(area + LAND_AREA);
+    expect(S().events[0].text).toBe('Doğu Arazisi senin! Ne olacağını seçmek için haritada araziye dokun.');
+    useGame.setState({ coins: LAND_USES.pond.cost, xp: MAX_XP });
+    S().convertLand('east', 'pond');
+    expect(S().land.east).toBe('pond');
+  });
+
+  it('a parcel can be bought ready as a field, at the price of the land alone', () => {
+    start({ coins: east.land!.price });
+    const area = farmArea(S());
+    S().buyLand('east', 'field');
     expect(S().coins).toBe(0);
     expect(S().fields.east).toHaveLength(BASE_PLOTS);
     expect(S().fields.east.every((p) => p.crop === null)).toBe(true);
@@ -224,7 +238,7 @@ describe('what the land is for', () => {
     rich();
     S().convertLand('tomatoes', 'barn');
     expect(S().land.tomatoes).toBe('field');
-    expect(S().events[0].text).toContain('ekin var');
+    expect(S().events[0].text).toContain('ekin var: hasat et ya da tarlayı boz');
     useGame.setState({ fields: { ...S().fields, tomatoes: S().fields.tomatoes.map(() => S().fields.tomatoes[5]) } });
     const barn = barnCapacity(S());
     S().convertLand('tomatoes', 'barn');
@@ -235,6 +249,19 @@ describe('what the land is for', () => {
     expect(S().events[0].text).toBe('Domates Tarlası artık Kuzey Ahırı.');
     S().convertLand('tomatoes', 'field');
     expect(S().fields.tomatoes).toHaveLength(BASE_PLOTS);
+  });
+
+  it('a field can be dug up, crops and all, when asked to', () => {
+    rich();
+    const growing = S().fields.tomatoes.filter((p) => p.crop && !p.dead).length;
+    expect(growing).toBeGreaterThan(0);
+    S().convertLand('tomatoes', 'empty', true);
+    expect(S().land.tomatoes).toBe('empty');
+    expect(S().fields.tomatoes).toEqual([]);
+    expect(S().coins).toBe(RICH);
+    expect(S().events[0].text).toBe(`Domates Tarlası artık Kuzey Arazisi. ${growing} ekin söküldü.`);
+    S().expandField('tomatoes');
+    expect(S().events[0].text).toBe('Bu arazi tarla değil.');
   });
 
   it('a barn or pond cannot be taken away while the animals or fish would not fit', () => {

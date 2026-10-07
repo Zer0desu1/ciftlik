@@ -150,10 +150,11 @@ export const FIELDS: FieldDef[] = [
   { id: 'far', name: 'Uzak Tarla', place: 'Uzak', plots: 8, suggested: ['pumpkin', 'corn'], land: { price: 1500, level: 5 } },
 ];
 
-export type LandUse = 'field' | 'barn' | 'pond' | 'tank' | 'solar';
+export type LandUse = 'empty' | 'field' | 'barn' | 'pond' | 'tank' | 'solar';
 
 /** What a piece of land can be made into, what that costs, and what it adds. */
 export const LAND_USES: Record<LandUse, { name: string; suffix: string; cost: number; level: number; adds: number; blurb: string }> = {
+  empty: { name: 'Boş arazi', suffix: 'Arazisi', cost: 0, level: 1, adds: 0, blurb: 'Ne olacağına sen karar ver' },
   field: { name: 'Tarla', suffix: 'Tarlası', cost: 100, level: 1, adds: 8, blurb: '8 parsellik tarla' },
   barn: { name: 'Ahır ve mera', suffix: 'Ahırı', cost: 400, level: 2, adds: 20, blurb: '+20 hayvanlık yer' },
   pond: { name: 'Balık havuzu', suffix: 'Havuzu', cost: 300, level: 2, adds: 12, blurb: '+12 balıklık yer' },
