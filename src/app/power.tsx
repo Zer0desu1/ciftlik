@@ -6,7 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { CoinIcon } from '@/components/art/items';
 import { Button, Card, IconBadge, Pill, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
 import { clockLabel, dayOf, weatherFor, weatherLabel } from '@/game/clock';
-import { LAND_USES, MACHINES, POWER, SUN, WIND, type MachineId } from '@/game/data';
+import { FIELDS, LAND_USES, MACHINES, POWER, SUN, WIND, landName, type MachineId } from '@/game/data';
 import { landCount, levelOf, powerBalance, powerMade, powerUsed, useGame } from '@/game/store';
 import { C, F, S } from '@/theme';
 
@@ -95,6 +95,9 @@ export default function PowerScreen() {
   const balance = powerBalance(state);
   const weather = weatherFor(dayOf(state.minutes));
   const solarLand = landCount(state, 'solar');
+  const solarFields = FIELDS.filter((f) => state.land[f.id] === 'solar');
+  // The share of today's output that is the sun's at this hour, to split it per field.
+  const maxNow = state.power.panels * POWER.panel.kwh + solarLand * LAND_USES.solar.adds + state.power.turbines * POWER.turbine.kwh * WIND[weather.kind];
   const machines = (Object.keys(state.machines) as MachineId[]).filter((id) => state.machines[id]?.on && MACHINES[id].power > 0);
 
   return (
@@ -159,6 +162,22 @@ export default function PowerScreen() {
         level={POWER.turbine.level}
         onPress={() => buyPower('turbine')}
       />
+      {solarFields.map((f) => (
+        <Card key={f.id} style={{ gap: S.sm }}>
+          <Row gap={S.md}>
+            <Sun size={22} color={C.amber} />
+            <View style={{ flex: 1 }}>
+              <Txt v="heading">{landName(f, 'solar')}</Txt>
+              <Txt v="caption">Güneş tarlası · öğlen {LAND_USES.solar.adds} kWh/sa · şu an {kwh(made > 0 ? (LAND_USES.solar.adds * made) / Math.max(0.0001, maxNow) : 0)}/sa</Txt>
+            </View>
+          </Row>
+          <Row gap={4} style={{ flexWrap: 'wrap' }}>
+            {Array.from({ length: 9 }).map((_, i) => (
+              <View key={i} style={styles.panelTile} />
+            ))}
+          </Row>
+        </Card>
+      ))}
       <Card onPress={() => router.push('/upgrades')} tint={C.amberSoft} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
         <Sun size={22} color={C.amber} />
         <View style={{ flex: 1 }}>
@@ -224,4 +243,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   slotOn: { borderStyle: 'solid', borderColor: C.amber, backgroundColor: C.amberSoft },
+  panelTile: { width: 30, height: 20, borderRadius: 3, backgroundColor: '#24467A', borderWidth: 1, borderColor: '#BFD3F0' },
 });

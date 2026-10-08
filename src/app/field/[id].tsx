@@ -8,7 +8,8 @@ import { CropArt } from '@/components/art/crops';
 import { ItemIcon } from '@/components/art/items';
 import { ConvertCard } from '@/components/land-convert';
 import { Bar, Button, Card, Chip, Pill, Row, Screen, Txt, TopBar } from '@/components/ui';
-import { CROPS, FIELD_EXPANSIONS, FIELDS, type CropId, type FieldId } from '@/game/data';
+import { CROPS, FIELD_EXPANSIONS, FIELDS, SEASONS, type CropId, type FieldId } from '@/game/data';
+import { dayOf, seasonOf } from '@/game/clock';
 import { plotStage, summarizeField } from '@/game/selectors';
 import { fieldLevel, levelOf, tankCapacity, useGame, type Plot } from '@/game/store';
 import { C, F, R, S } from '@/theme';
@@ -80,16 +81,18 @@ function SeedPicker({ field, onPick, onClose }: { field: FieldId; onPick: (crop:
   const inventory = useGame((s) => s.inventory);
   const level = levelOf(useGame((s) => s.xp));
   const def = FIELDS.find((f) => f.id === field)!;
-  const crops = (Object.keys(CROPS) as CropId[]).sort(
-    (a, b) => Number(def.suggested.includes(b)) - Number(def.suggested.includes(a)) || CROPS[a].level - CROPS[b].level,
-  );
+  const season = useGame((s) => seasonOf(dayOf(s.minutes)));
+  const fits = (c: CropId) => Number(CROPS[c].seasons.includes(season)) * 2 + Number(def.suggested.includes(c));
+  const crops = (Object.keys(CROPS) as CropId[]).sort((a, b) => fits(b) - fits(a) || CROPS[a].level - CROPS[b].level);
   return (
     <Modal transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + S.lg }]}>
         <View style={styles.grip} />
         <Txt v="title">Ne ekelim?</Txt>
-        <Txt v="caption" style={{ marginBottom: S.md }}>Bu tarlaya en uygun olanlar başta.</Txt>
+        <Txt v="caption" style={{ marginBottom: S.md }}>
+          {SEASONS[season].name}: mevsimine uygun olanlar başta. Mevsim dışı ürün yarı hızda büyür.
+        </Txt>
         <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: S.sm }}>
           {crops.map((id) => {
             const crop = CROPS[id];
@@ -105,7 +108,8 @@ function SeedPicker({ field, onPick, onClose }: { field: FieldId; onPick: (crop:
                 <View style={{ flex: 1 }}>
                   <Row gap={6}>
                     <Txt v="label">{crop.name}</Txt>
-                    {def.suggested.includes(id) ? <Pill text="Uygun" tone="green" /> : null}
+                    {crop.seasons.includes(season) ? <Pill text="Mevsimi" tone="green" /> : <Pill text="Mevsim dışı" tone="amber" />}
+                    {def.suggested.includes(id) ? <Pill text="Tarlaya uygun" tone="muted" /> : null}
                   </Row>
                   <Txt v="caption">
                     {crop.growHours} saatte büyür · {crop.yield} birim verir

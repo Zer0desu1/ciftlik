@@ -32,6 +32,8 @@ function advance(hours: number) {
 }
 
 const S = () => useGame.getState();
+/** The last thing the game said, leaving aside achievements it noticed along the way. */
+const said = () => S().events.find((e) => !e.text.startsWith('Başarım açıldı'))!.text;
 const plot = (crop: Plot['crop'], growth: number, moisture: number, extra: Partial<Plot> = {}): Plot => ({
   ...emptyPlot(),
   crop,
@@ -104,7 +106,7 @@ describe('clock', () => {
     expect(dayOf(S().minutes)).toBe(2);
     expect(S().meals).toEqual({ day: 2, done: [false, false, false] });
     expect(S().log.some((l) => l.day === 2)).toBe(true);
-    expect(S().events[0].text).toMatch(/2\. gün başladı/);
+    expect(said()).toMatch(/2\. gün başladı/);
   });
 
   it('sleeps until 06:00 the next morning', () => {
@@ -233,7 +235,7 @@ describe('fields', () => {
     expect(f.map((p) => p.crop)).toEqual([null, 'wheat', 'corn', null, null, null, null, null]);
     expect(f.some((p) => p.dead || p.weeds)).toBe(false);
     expect(f[2].growth).toBe(0.5);
-    expect(S().events[0].text).toBe('2 ölü bitki ve 1 parselin otu temizlendi.');
+    expect(said()).toBe('2 ölü bitki ve 1 parselin otu temizlendi.');
   });
 
   it('lets weeds spring up by chance on growing plots', () => {
@@ -471,7 +473,7 @@ describe('progress and the home screen', () => {
     start({ xp: 59, inventory: { seed_lettuce: 1 } });
     S().plant('vegetables', 7, 'lettuce');
     expect(levelOf(S().xp)).toBe(2);
-    expect(S().events[0].text).toMatch(/Seviye 2/);
+    expect(said()).toMatch(/Seviye 2/);
   });
 
   it('scores the farm’s health between 0 and 100, lower when things are neglected', () => {

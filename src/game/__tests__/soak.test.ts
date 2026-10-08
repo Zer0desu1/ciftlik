@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { seeded } from '../clock';
-import { CROPS, FIELDS, FISH, ITEMS, LAND_USES, MACHINES, SPECIES, type CropId, type FieldId, type ItemId, type LandUse, type MachineId, type SpeciesId } from '../data';
+import { ACHIEVEMENTS, CROPS, FIELDS, FISH, ITEMS, LAND_USES, MACHINES, MAX_ORDERS, SPECIES, WORKSHOP_SLOTS, WORKSHOPS, type WorkshopId, type CropId, type FieldId, type ItemId, type LandUse, type MachineId, type SpeciesId } from '../data';
 import {
   barnCapacity,
   coopCapacity,
@@ -77,6 +77,10 @@ function problems(s: GameState): string[] {
   num('power.used', s.power.used);
   num('power.made', s.power.made);
   if (s.power.unpaid < 0) out.push(`fatura eksi: ${s.power.unpaid}`);
+  if (s.orders.length > MAX_ORDERS) out.push(`çok sipariş: ${s.orders.length}`);
+  for (const o of s.orders) if (!(o.qty > 0) || !(o.reward > 0) || !(o.item in ITEMS)) out.push(`bozuk sipariş ${o.id}`);
+  for (const [id, w] of Object.entries(s.workshops)) if ((w?.jobs.length ?? 0) > WORKSHOP_SLOTS) out.push(`atölye taştı: ${id}`);
+  for (const id of s.claimed) if (!s.achievements.includes(id)) out.push(`açılmamış ödül alındı: ${id}`);
   for (const l of s.log) {
     num(`log ${l.day} income`, l.income);
     num(`log ${l.day} expense`, l.expense);
@@ -139,6 +143,11 @@ function randomMove(r: () => number): string {
     ['buyPower', () => a.buyPower(r() < 0.5 ? 'panel' : 'turbine')],
     ['payBill', () => a.payBill()],
     ['sleep', () => a.sleep()],
+    ['deliver', () => s.orders.length && a.deliver(pick(r, s.orders).id)],
+    ['buyWorkshop', () => a.buyWorkshop(pick(r, Object.keys(WORKSHOPS) as WorkshopId[]))],
+    ['craft', () => a.craft(pick(r, Object.keys(WORKSHOPS) as WorkshopId[]))],
+    ['buyDog', () => a.buyDog()],
+    ['claim', () => a.claim(pick(r, ACHIEVEMENTS).id)],
   ];
   const [name, run] = pick(r, moves);
   run();

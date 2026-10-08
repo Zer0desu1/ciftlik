@@ -8,6 +8,7 @@ import {
   hourOf,
   MAX_CATCH_UP_HOURS,
   MINUTES_PER_DAY,
+  seasonOf,
   seeded,
   weatherFor,
 } from './clock';
@@ -23,6 +24,19 @@ import {
   HUNGER_PER_HOUR,
   LAND_AREA,
   LAND_USES,
+  SEASONS,
+  ACHIEVEMENTS,
+  CUSTOMERS,
+  DOG_PRICE,
+  HAPPENING_CHANCE,
+  HAPPENINGS,
+  MAX_ORDERS,
+  WINTER_HUNGER,
+  WORKSHOP_SLOTS,
+  WORKSHOPS,
+  type HappeningKind,
+  type StatId,
+  type WorkshopId,
   POWER,
   SUN,
   WIND,
@@ -101,6 +115,9 @@ export type DayLog = {
   deaths: number;
 };
 
+/** Something a customer wants. */
+export type Order = { id: string; who: string; item: ItemId; qty: number; reward: number; xp: number; dueDay: number };
+
 /** The farm's electricity: what is built, and today's meter readings. */
 export type Power = {
   panels: number;
@@ -117,7 +134,7 @@ export type Power = {
 export type FarmEvent = { id: number; at: number; text: string; tone: 'good' | 'bad' | 'info' };
 
 export type GameState = {
-  version: 9;
+  version: 10;
   farmName: string;
   /** Game time, in minutes since day 1, 00:00. */
   minutes: number;
@@ -130,6 +147,20 @@ export type GameState = {
   /** The land owned and what is on it. Land not listed is still for sale. */
   land: Partial<Record<FieldId, LandUse>>;
   power: Power;
+  /** What customers have asked for, to deliver before `dueDay` ends. */
+  orders: Order[];
+  /** Lifetime counts, for achievements. */
+  stats: Record<StatId, number>;
+  /** Achievements won, by id. */
+  achievements: string[];
+  /** Achievements whose reward has been taken. */
+  claimed: string[];
+  /** Workshops built, each with the batches on: when each is ready, in game minutes. */
+  workshops: Partial<Record<WorkshopId, { jobs: number[] }>>;
+  /** What happened this morning, if anything. */
+  happening: { day: number; kind: HappeningKind; item?: ItemId; note: string } | null;
+  /** A watchdog: keeps the fox from the coop. */
+  dog: boolean;
   animals: Animal[];
   barnClean: number;
   /** `feeds` counts every feeding, by hand or machine, so the pond can show the food going in. */
@@ -175,6 +206,12 @@ type Actions = {
   expandField: (field: FieldId) => void;
   buyLand: (field: FieldId, use?: LandUse) => void;
   buyPower: (kind: 'panel' | 'turbine') => void;
+  deliver: (orderId: string) => void;
+  buyWorkshop: (id: WorkshopId) => void;
+  craft: (id: WorkshopId) => void;
+  buyDog: () => void;
+  rename: (name: string) => void;
+  claim: (achievementId: string) => void;
   payBill: () => void;
   /** `destroy` digs up whatever grows on a field rather than refusing. */
   convertLand: (field: FieldId, to: LandUse, destroy?: boolean) => void;
@@ -317,10 +354,20 @@ export function initialState(now = Date.now()): GameState {
   };
   const land: GameState['land'] = { tomatoes: 'field', vegetables: 'field', corn: 'field' };
   return {
-    version: 9,
+    version: 10,
     farmName: 'Yeşil Vadi Çiftliği',
     land,
     power: { panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] },
+    orders: [
+      { id: 'order-a', who: 'Köy bakkalı', item: 'egg', qty: 6, reward: 30, xp: 15, dueDay: 3 },
+      { id: 'order-b', who: 'Lokanta Lezzet', item: 'tomato', qty: 8, reward: 70, xp: 20, dueDay: 4 },
+    ],
+    stats: { harvested: 0, collected: 0, caught: 0, born: 0, orders: 0, crafted: 0 },
+    achievements: [],
+    claimed: [],
+    workshops: {},
+    happening: null,
+    dog: false,
     minutes: 7 * 60,
     lastReal: now,
     coins: 300,
@@ -377,7 +424,12 @@ export function priceMultiplier(day: number, item: ItemId): number {
 export function sellPrice(day: number, item: ItemId): number {
   const def = ITEMS[item];
   const base = def.kind === 'seed' || def.kind === 'supply' ? def.price * 0.5 : def.price;
-  return Math.max(1, Math.round(base * priceMultiplier(day, item)));
+  const crop = def.kind === 'crop' ? Object.values(CROPS).find((c) => c.harvest === item) : undefined;
+  // Scarce out of season, so dearer.
+  const season = crop && !crop.seasons.includes(seasonOf(day)) ? 1.4 : 1;
+  const h = happeningFor(day);
+  const boom = h?.kind === 'boom' && h.item === item ? 2 : 1;
+  return Math.max(1, Math.round(base * priceMultiplier(day, item) * season * boom));
 }
 
 export function buyPrice(item: ItemId): number {
@@ -418,6 +470,11 @@ function draft(s: GameState): Draft {
     warned: { ...s.warned },
     land: { ...s.land },
     power: { ...s.power, history: [...s.power.history] },
+    orders: [...s.orders],
+    stats: { ...s.stats },
+    achievements: [...s.achievements],
+    claimed: [...s.claimed],
+    workshops: Object.fromEntries(Object.entries(s.workshops).map(([k, v]) => [k, { jobs: [...(v?.jobs ?? [])] }])),
     meals: { day: s.meals.day, done: [...s.meals.done] as [boolean, boolean, boolean] },
     log: s.log.map((l) => ({ ...l })),
     events: [...s.events],
@@ -453,6 +510,7 @@ function harvestPlot(d: Draft, field: FieldId, index: number): number {
   const crop = CROPS[p.crop];
   const amount = Math.round(crop.yield * (p.fertilized ? 1.5 : 1));
   addItem(d, crop.harvest, amount);
+  d.stats.harvested += amount;
   ensureDay(d, dayOf(d.minutes)).crops += amount;
   d.fields[field][index] = { ...emptyPlot(), moisture: p.moisture, lastCrop: p.crop };
   gainXp(d, Math.round(crop.growHours / 2));
@@ -486,6 +544,7 @@ function collectHerd(d: Draft, species: SpeciesId): number {
   });
   if (!total) return 0;
   addItem(d, s.product, total);
+  d.stats.collected += total;
   ensureDay(d, dayOf(d.minutes)).produce += total;
   gainXp(d, total);
   return total;
@@ -530,7 +589,9 @@ function runMachines(d: Draft, dt: number) {
         const inStock = (c: CropId) => (d.inventory[CROPS[c].seed] ?? 0) > 0;
         const first = (now.dead ? now.crop : now.lastCrop) ?? null;
         // What it grew before, if there is seed for it; else what the field is for.
-        const want = first && inStock(first) ? first : (def.suggested.find(inStock) ?? first);
+        const season = seasonOf(dayOf(d.minutes));
+        const inSeason = (c: CropId) => inStock(c) && CROPS[c].seasons.includes(season);
+        const want = first && inStock(first) ? first : (def.suggested.find(inSeason) ?? def.suggested.find(inStock) ?? first);
         if (want) {
           const crop = CROPS[want];
           if (takeItem(d, crop.seed, 1)) {
@@ -581,7 +642,8 @@ export function powerMade(s: GameState, minutes = s.minutes): number {
 /** kWh an hour the farm uses now: the house and the machines that are working. */
 export function powerUsed(s: GameState): number {
   const machines = (Object.keys(s.machines) as MachineId[]).filter((id) => s.machines[id]?.on && !(s.power.unpaid > 0));
-  return POWER.house + machines.reduce((n, id) => n + MACHINES[id].power, 0);
+  const shops = (Object.keys(s.workshops ?? {}) as WorkshopId[]).filter((id) => (s.workshops[id]?.jobs.length ?? 0) > 0 && !(s.power.unpaid > 0));
+  return POWER.house + machines.reduce((n, id) => n + MACHINES[id].power, 0) + shops.reduce((n, id) => n + WORKSHOPS[id].power, 0);
 }
 
 /** What today's meter comes to so far: positive is owed, negative is earned. */
@@ -639,24 +701,50 @@ function simulate(d: Draft, hours: number) {
       d.meals = { day, done: [false, false, false] };
       ensureDay(d, day);
       const w = weatherFor(day);
+      if (seasonOf(day) !== seasonOf(beforeDay)) note(d, `${SEASONS[seasonOf(day)].name} geldi! ${SEASONS[seasonOf(day)].blurb}`, 'info');
       note(d, `${day}. gün başladı · ${WEATHER[w.kind].label}, ${w.temp}°C`, 'info');
+      newOrders(d, day);
+      happen(d, day);
     }
 
     const weather = weatherFor(day);
     const w = WEATHER[weather.kind];
     const heat = weather.temp >= 30 ? 1.2 : 1;
 
-    if (w.rain) d.tank = Math.min(tankCapacity(d), d.tank + 40 * dt);
+    const drought = d.happening?.day === day && d.happening.kind === 'drought';
+    const rain = w.rain && !drought;
+    const dry = w.dryFactor * (drought ? 2 : 1);
+    const season = seasonOf(day);
+    if (rain) d.tank = Math.min(tankCapacity(d), d.tank + 40 * dt);
+
+    // Workshops
+    (Object.keys(d.workshops) as WorkshopId[]).forEach((id) => {
+      const shop = d.workshops[id];
+      if (!shop?.jobs.length) return;
+      if (d.power.unpaid > 0) {
+        shop.jobs = shop.jobs.map((t) => t + dt * 60);
+        return;
+      }
+      const done = shop.jobs.filter((t) => t <= d.minutes).length;
+      if (!done) return;
+      shop.jobs = shop.jobs.filter((t) => t > d.minutes);
+      addItem(d, WORKSHOPS[id].output, done);
+      d.stats.crafted += done;
+      gainXp(d, 3 * done);
+      note(d, `${WORKSHOPS[id].name}: ${done} ${ITEMS[WORKSHOPS[id].output].name.toLowerCase()} hazır.`, 'good');
+    });
 
     // Fields
     for (const def of FIELDS) {
       d.fields[def.id].forEach((p) => {
         if (!p.crop || p.dead) return;
         const crop = CROPS[p.crop];
-        p.moisture = w.rain ? 100 : clamp(p.moisture - crop.thirst * w.dryFactor * heat * dt);
+        p.moisture = rain ? 100 : clamp(p.moisture - crop.thirst * dry * heat * dt);
         if (p.growth < 1) {
           if (p.moisture > DRY) {
-            const rate = (1 / crop.growHours) * (p.weeds ? 0.5 : 1) * (p.fertilized ? 1.3 : 1);
+            // Out of season it struggles, and in winter more so.
+            const seasonal = crop.seasons.includes(season) ? 1 : season === 'winter' ? 0.3 : 0.5;
+            const rate = (1 / crop.growHours) * (p.weeds ? 0.5 : 1) * (p.fertilized ? 1.3 : 1) * seasonal;
             p.growth = Math.min(1, p.growth + rate * dt);
             p.dryHours = 0;
           } else {
@@ -686,7 +774,7 @@ function simulate(d: Draft, hours: number) {
       const s = SPECIES[a.species];
       const adult = isAdult(a, day);
       const old = isOld(a, day);
-      a.fullness = clamp(a.fullness - HUNGER_PER_HOUR * dt);
+      a.fullness = clamp(a.fullness - HUNGER_PER_HOUR * (seasonOf(day) === 'winter' ? WINTER_HUNGER : 1) * dt);
       a.happiness = clamp(a.happiness - 0.8 * dt);
       let healthDelta = 0.4;
       if (a.fullness < 20) healthDelta -= 2.5;
@@ -725,6 +813,7 @@ function simulate(d: Draft, hours: number) {
         a.pregnantSince = null;
         const young = makeYoung(a.species, d.nextId++, day, a.breed, [...d.animals, ...born]);
         born.push(young);
+        d.stats.born++;
         note(d, `${a.name} bir ${s.baby} doğurdu: ${young.name}!`, 'good');
       }
 
@@ -758,6 +847,7 @@ function simulate(d: Draft, hours: number) {
       const room = coopCapacity(d) - inCoop(d);
       const chicks = Math.max(0, Math.min(tray.eggs, room));
       for (let i = 0; i < chicks; i++) d.animals.push(makeYoung('chicken', d.nextId++, day, SPECIES.chicken.breeds[0], d.animals));
+      d.stats.born += chicks;
       if (chicks) {
         ensureDay(d, day).births += chicks;
         note(d, `Kuluçkadan ${chicks} civciv çıktı!`, 'good');
@@ -803,8 +893,126 @@ function update(set: (fn: (s: Store) => Partial<Store>) => void, fn: (d: Draft) 
   set((s) => {
     const d = draft(s);
     fn(d);
+    checkAchievements(d);
     return d;
   });
+}
+
+/** How far the farm is toward an achievement. */
+export function achievementProgress(s: GameState, a: (typeof ACHIEVEMENTS)[number]): number {
+  const m = a.measure;
+  if ('stat' in m) return s.stats?.[m.stat] ?? 0;
+  if (m.count === 'cows') return s.animals.filter((x) => x.species === 'cow').length;
+  if (m.count === 'chickens') return s.animals.filter((x) => x.species === 'chicken').length;
+  if (m.count === 'land') return FIELDS.filter((f) => f.land && s.land[f.id]).length;
+  if (m.count === 'panels') return s.power.panels;
+  if (m.count === 'level') return levelOf(s.xp);
+  return s.coins;
+}
+
+function checkAchievements(d: Draft) {
+  if (!d.achievements) return;
+  for (const a of ACHIEVEMENTS) {
+    if (d.achievements.includes(a.id) || achievementProgress(d, a) < a.target) continue;
+    d.achievements = [...d.achievements, a.id];
+    note(d, `Başarım açıldı: ${a.name}! Ödülünü Görevler'den al.`, 'good');
+  }
+}
+
+/** Items a customer could reasonably ask this farm for, as it stands. */
+function orderable(d: Draft): ItemId[] {
+  const level = levelOf(d.xp);
+  const out: ItemId[] = Object.values(CROPS).filter((c) => c.level <= level).map((c) => c.harvest);
+  (Object.keys(SPECIES) as SpeciesId[]).forEach((sp) => {
+    if (d.animals.some((a) => a.species === sp)) out.push(SPECIES[sp].product);
+  });
+  d.pond.batches.forEach((b) => out.push(FISH[b.species].catch));
+  (Object.keys(d.workshops) as WorkshopId[]).forEach((id) => out.push(WORKSHOPS[id].output));
+  return [...new Set(out)];
+}
+
+/** Morning: orders run out, and new customers come. */
+function newOrders(d: Draft, day: number) {
+  const late = d.orders.filter((o) => o.dueDay < day);
+  if (late.length) {
+    d.orders = d.orders.filter((o) => o.dueDay >= day);
+    note(d, late.length === 1 ? `${late[0].who} siparişi zamanında gelmedi, vazgeçti.` : `${late.length} sipariş zamanında teslim edilmedi.`, 'bad');
+  }
+  const items = orderable(d);
+  let wanted = d.orders.length < MAX_ORDERS ? 1 + (Math.random() < 0.4 ? 1 : 0) : 0;
+  while (wanted-- > 0 && d.orders.length < MAX_ORDERS && items.length) {
+    const item = items[Math.floor(Math.random() * items.length)];
+    const kind = ITEMS[item].kind;
+    const [lo, hi] = kind === 'crop' ? [6, 16] : kind === 'produce' ? [4, 12] : [2, 5];
+    const qty = lo + Math.floor(Math.random() * (hi - lo + 1));
+    const reward = Math.round(ITEMS[item].price * qty * (1.6 + Math.random() * 0.6));
+    d.orders = [
+      ...d.orders,
+      {
+        id: `order-${d.nextId++}`,
+        who: CUSTOMERS[Math.floor(Math.random() * CUSTOMERS.length)],
+        item,
+        qty,
+        reward,
+        xp: 5 + qty * 2,
+        dueDay: day + 2 + Math.floor(Math.random() * 2),
+      },
+    ];
+  }
+}
+
+/** What the day has in store, chosen by the day itself, so the market knows a boom in advance. */
+export function happeningFor(day: number): { kind: HappeningKind; item?: ItemId } | null {
+  if (day < 3) return null;
+  const rand = seeded(day * 4513 + 7);
+  if (rand() >= HAPPENING_CHANCE) return null;
+  const roll = rand();
+  const season = seasonOf(day);
+  let kind: HappeningKind = roll < 0.3 ? 'fox' : roll < 0.55 ? 'drought' : roll < 0.75 ? 'locusts' : 'boom';
+  if (kind === 'drought' && season === 'winter') kind = 'boom';
+  if (kind === 'locusts' && season !== 'summer' && season !== 'autumn') kind = 'boom';
+  if (kind !== 'boom') return { kind };
+  const sellable = (Object.keys(ITEMS) as ItemId[]).filter((i) => ['crop', 'produce', 'fish', 'goods'].includes(ITEMS[i].kind));
+  return { kind, item: sellable[Math.floor(rand() * sellable.length)] };
+}
+
+/** Morning: whatever the day brings, happens. */
+function happen(d: Draft, day: number) {
+  const h = happeningFor(day);
+  d.happening = null;
+  if (!h) return;
+  if (h.kind === 'fox') {
+    const hens = d.animals.filter((a) => a.species === 'chicken');
+    if (!hens.length) return;
+    if (d.dog) {
+      d.happening = { day, kind: 'fox', note: 'Karabaş tilkiyi kovaladı, kümes güvende.' };
+      return note(d, 'Gece tilki geldi ama Karabaş kovaladı!', 'good');
+    }
+    const taken = hens[Math.floor(Math.random() * hens.length)];
+    d.animals = d.animals.filter((a) => a.id !== taken.id);
+    ensureDay(d, day).deaths++;
+    d.happening = { day, kind: 'fox', note: `Tilki ${taken.name} adlı tavuğu kaptı. Bekçi köpeği alırsan bir daha olmaz.` };
+    return note(d, `Gece tilki kümese girdi, ${taken.name} kayıp!`, 'bad');
+  }
+  if (h.kind === 'drought') {
+    d.happening = { day, kind: 'drought', note: HAPPENINGS.drought.blurb };
+    return note(d, 'Kuraklık! Bugün yağmur yok, tarlalar çabuk kurur.', 'bad');
+  }
+  if (h.kind === 'locusts') {
+    let hit = 0;
+    for (const f of FIELDS) {
+      d.fields[f.id] = d.fields[f.id].map((p) => {
+        if (!p.crop || p.dead || p.growth >= 1) return p;
+        hit++;
+        return { ...p, growth: Math.max(0, p.growth - 0.25) };
+      });
+    }
+    if (!hit) return;
+    d.happening = { day, kind: 'locusts', note: `Çekirgeler ${hit} parselin büyümesini geri attı.` };
+    return note(d, `Çekirge sürüsü! ${hit} parsel geri kaldı.`, 'bad');
+  }
+  d.happening = { day, kind: 'boom', item: h.item, note: `Bugün ${ITEMS[h.item!].name.toLowerCase()} fiyatı iki katı!` };
+  note(d, `Fiyat patlaması: ${ITEMS[h.item!].name} bugün iki katına satılıyor!`, 'good');
 }
 
 export const useGame = create<Store>()(
@@ -1065,6 +1273,74 @@ export const useGame = create<Store>()(
           note(d, `${name} kuruldu (${d.power[key]} / ${def.max}).`, 'good');
         }),
 
+      deliver: (orderId) =>
+        update(set, (d) => {
+          const o = d.orders.find((x) => x.id === orderId);
+          if (!o) return;
+          if ((d.inventory[o.item] ?? 0) < o.qty) return note(d, `${o.who} için ${o.qty} ${ITEMS[o.item].name.toLowerCase()} gerekli.`, 'bad');
+          takeItem(d, o.item, o.qty);
+          d.orders = d.orders.filter((x) => x.id !== orderId);
+          d.coins += o.reward;
+          ensureDay(d, dayOf(d.minutes)).income += o.reward;
+          gainXp(d, o.xp);
+          d.stats.orders++;
+          note(d, `${o.who} siparişini aldı: +${o.reward} altın.`, 'good');
+        }),
+
+      buyWorkshop: (id) =>
+        update(set, (d) => {
+          const w = WORKSHOPS[id];
+          if (d.workshops[id]) return;
+          if (w.level > levelOf(d.xp)) return note(d, `${w.name} için seviye ${w.level} gerekli.`, 'bad');
+          if (d.coins < w.price) return note(d, 'Yeterli paran yok.', 'bad');
+          d.coins -= w.price;
+          ensureDay(d, dayOf(d.minutes)).expense += w.price;
+          d.workshops[id] = { jobs: [] };
+          gainXp(d, 15);
+          note(d, `${w.name} kuruldu.`, 'good');
+        }),
+
+      craft: (id) =>
+        update(set, (d) => {
+          const w = WORKSHOPS[id];
+          const shop = d.workshops[id];
+          if (!shop) return;
+          if (shop.jobs.length >= WORKSHOP_SLOTS) return note(d, `${w.name} dolu: bir parti bitsin.`, 'bad');
+          const short = w.inputs.find((i) => (d.inventory[i.item] ?? 0) < i.qty);
+          if (short) return note(d, `${ITEMS[short.item].name} yetmiyor: ${short.qty} gerekli.`, 'bad');
+          w.inputs.forEach((i) => takeItem(d, i.item, i.qty));
+          // Batches queue: each starts when the one before it is done.
+          const from = Math.max(d.minutes, ...shop.jobs);
+          shop.jobs = [...shop.jobs, from + w.hours * 60];
+        }),
+
+      buyDog: () =>
+        update(set, (d) => {
+          if (d.dog) return;
+          if (d.coins < DOG_PRICE) return note(d, 'Yeterli paran yok.', 'bad');
+          d.coins -= DOG_PRICE;
+          ensureDay(d, dayOf(d.minutes)).expense += DOG_PRICE;
+          d.dog = true;
+          note(d, 'Karabaş çiftliğe geldi. Artık tilki kümese yaklaşamaz.', 'good');
+        }),
+
+      claim: (id) =>
+        update(set, (d) => {
+          const a = ACHIEVEMENTS.find((x) => x.id === id);
+          if (!a || !d.achievements.includes(id) || d.claimed.includes(id)) return;
+          d.claimed = [...d.claimed, id];
+          d.coins += a.reward;
+          ensureDay(d, dayOf(d.minutes)).income += a.reward;
+          gainXp(d, 10);
+          note(d, `${a.name} ödülü: +${a.reward} altın.`, 'good');
+        }),
+
+      rename: (name) =>
+        update(set, (d) => {
+          const clean = name.trim().slice(0, 32);
+          if (clean) d.farmName = clean;
+        }),
+
       payBill: () =>
         update(set, (d) => {
           const bill = d.power.unpaid;
@@ -1192,6 +1468,7 @@ export const useGame = create<Store>()(
           if (!n) return;
           const f = FISH[b.species];
           addItem(d, f.catch, n);
+          d.stats.caught += n;
           ensureDay(d, dayOf(d.minutes)).fish += n;
           gainXp(d, n * 3);
           note(d, `${n} ${f.name.toLowerCase()} tutuldu.`, 'good');
@@ -1275,11 +1552,11 @@ export const useGame = create<Store>()(
           note(d, 'Sabaha kadar uyudun.', 'info');
         }),
 
-      reset: () => set(() => initialState()),
+      reset: () => set(() => ({ ...initialState(), farmName: get().farmName })),
     }),
     {
       name: 'ciftlik-save',
-      version: 9,
+      version: 10,
       migrate: (persisted, version) => migrate(persisted, version),
       storage: createJSONStorage(() => AsyncStorage),
       // Only data is saved; the actions are rebuilt on load.
@@ -1422,7 +1699,15 @@ export function migrate(persisted: unknown, version: number): GameState {
     const hens = s.animals.filter((a) => a.species === 'chicken').length + s.incubator.reduce((n, t) => n + t.eggs, 0);
     while (s.upgrades.coop < FACILITIES.coop.steps.length && capacity(s, 'coop') < hens) s.upgrades.coop++;
   }
-  s.version = 9;
+  // Version 10: seasons, workshops, orders, achievements and the day's happenings.
+  s.orders ??= [];
+  s.stats ??= { harvested: 0, collected: 0, caught: 0, born: 0, orders: 0, crafted: 0 };
+  s.achievements ??= [];
+  s.claimed ??= [];
+  s.workshops ??= {};
+  s.happening ??= null;
+  s.dog ??= false;
+  s.version = 10;
   return s;
 }
 

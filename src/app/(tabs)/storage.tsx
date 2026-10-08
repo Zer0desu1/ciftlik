@@ -12,6 +12,7 @@ import { sellPrice, useGame } from '@/game/store';
 import { C, R, S } from '@/theme';
 
 const GROUPS: { kind: ItemKind; title: string }[] = [
+  { kind: 'goods', title: 'İşlenmiş ürünler' },
   { kind: 'crop', title: 'Tarla ürünleri' },
   { kind: 'produce', title: 'Hayvan ürünleri' },
   { kind: 'fish', title: 'Balıklar' },

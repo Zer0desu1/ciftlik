@@ -8,7 +8,7 @@ import { AnimalArt } from '@/components/art/animals';
 import { CoinIcon, ItemIcon } from '@/components/art/items';
 import { Bar, Button, Card, Chip, IconBadge, Pill, Ring, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
 import { dayOf, hourOf } from '@/game/clock';
-import { HATCH_HOURS, INCUBATOR_SIZE, ITEMS, MEALS, SPECIES, type SpeciesId } from '@/game/data';
+import { DOG_PRICE, HATCH_HOURS, INCUBATOR_SIZE, ITEMS, MEALS, SPECIES, type SpeciesId } from '@/game/data';
 import { herdOf, productReady } from '@/game/selectors';
 import { animalValue, barnCapacity, coopCapacity, inBarn, inCoop, currentMeal, dueAt, isAdult, isOld, levelOf, useGame, type Animal } from '@/game/store';
 import { C, F, R, S } from '@/theme';
@@ -27,6 +27,22 @@ function statusPill(a: Animal, minutes: number): { text: string; tone: 'green' |
   if (a.fullness < 35) return { text: 'Aç', tone: 'rose' };
   if (isOld(a, day)) return { text: 'Yaşlı', tone: 'muted' };
   return { text: `Tok %${Math.round(a.fullness)}`, tone: 'amber' };
+}
+
+/** A dog by the coop keeps the fox away. */
+function Watchdog() {
+  const dog = useGame((s) => s.dog);
+  const coins = useGame((s) => s.coins);
+  return (
+    <Card tint={dog ? C.greenSoft : C.card} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
+      <Txt v="title">{dog ? '🐕' : '🦊'}</Txt>
+      <View style={{ flex: 1 }}>
+        <Txt v="label">{dog ? 'Karabaş kümesi koruyor' : 'Bekçi köpeği'}</Txt>
+        <Txt v="caption">{dog ? 'Tilki artık tavuklara yaklaşamaz.' : 'Tilki bazı geceler kümese dadanıp bir tavuk kapar. Köpek bunu önler.'}</Txt>
+      </View>
+      {dog ? null : <Button small label={`${DOG_PRICE} altın`} onPress={() => useGame.getState().buyDog()} disabled={coins < DOG_PRICE} />}
+    </Card>
+  );
 }
 
 function Incubator() {
@@ -308,6 +324,7 @@ export default function LivestockScreen() {
       </Card>
 
       {species === 'chicken' ? <Incubator /> : null}
+      {species === 'chicken' ? <Watchdog /> : null}
 
       <SectionHeader
         title={`${sp.plural}`}

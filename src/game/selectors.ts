@@ -101,6 +101,11 @@ export function tasks(state: GameState): Task[] {
   const today = dayOf(state.minutes);
   const hungry = state.animals.filter((a) => a.fullness < 35).length;
 
+  const due = (state.orders ?? []).filter((o) => o.dueDay === today && (state.inventory[o.item] ?? 0) >= o.qty);
+  if (due.length) out.push({ id: 'orders', text: `${due.length} sipariş bugün teslim edilmeli, ürünler hazır`, tone: 'urgent', href: '/goals' });
+  const rewards = (state.achievements ?? []).filter((id) => !(state.claimed ?? []).includes(id)).length;
+  if (rewards) out.push({ id: 'rewards', text: `${rewards} başarım ödülü seni bekliyor`, tone: 'ready', href: '/goals' });
+
   if (state.power?.unpaid > 0) {
     out.push({ id: 'power', text: `Elektrik faturası ödenmedi (${state.power.unpaid} altın): makineler durdu`, tone: 'urgent', href: '/power' });
   }

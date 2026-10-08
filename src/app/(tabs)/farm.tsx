@@ -1,5 +1,5 @@
 import { router, type Href } from 'expo-router';
-import { ArrowRight, Bot, Droplets, Fish, Hand, Home, Lock, Map, Maximize2, Move, Package, PawPrint, Sprout, Wheat, Zap } from 'lucide-react-native';
+import { ArrowRight, Bot, Droplets, Fish, Hand, Home, Lock, Map, Maximize2, Move, Package, PawPrint, Sprout, Trophy, Wheat, Zap, Factory } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -361,6 +361,10 @@ export default function FarmScreen() {
             </View>
             <ArrowRight size={18} color={C.amber} />
           </Card>
+          <Row gap={S.md}>
+            <ExploreTile title="Görevler" sub={`${state.orders.length} sipariş`} tint={C.amberSoft} icon={<Trophy size={18} color={C.amber} />} href="/goals" />
+            <ExploreTile title="Atölyeler" sub={`${Object.keys(state.workshops).length} / 4 kurulu`} tint={C.amberSoft} icon={<Factory size={18} color={C.amber} />} href="/workshops" />
+          </Row>
           <Card onPress={() => router.push('/power')} tint={state.power.unpaid ? C.roseSoft : C.amberSoft} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
             <IconBadge tint={C.white}>
               <Zap size={20} color={state.power.unpaid ? C.rose : C.amber} />

@@ -22,6 +22,8 @@ function advance(hours: number) {
   useGame.getState().tick(now);
 }
 const S = () => useGame.getState();
+/** The last thing the game said, leaving aside achievements it noticed along the way. */
+const said = () => S().events.find((e) => !e.text.startsWith('Başarım açıldı'))!.text;
 
 let n = 0;
 function animal(species: Animal['species'], patch: Partial<Animal> = {}): Animal {
@@ -138,7 +140,7 @@ describe('breeding', () => {
     S().incubate(6);
     expect(S().incubator).toHaveLength(0);
     expect(S().inventory.egg).toBe(6);
-    expect(S().events[0].text).toBe('Kümeste civcivlere yer yok.');
+    expect(said()).toBe('Kümeste civcivlere yer yok.');
   });
 
   it('a full barn leaves the coop free, and a full coop the barn', () => {
@@ -150,10 +152,10 @@ describe('breeding', () => {
     expect(S().animals.filter((a) => a.species === 'chicken')).toHaveLength(1);
     S().buyAnimal('cow');
     expect(S().animals.filter((a) => a.species === 'cow')).toHaveLength(BARN_CAPACITY);
-    expect(S().events[0].text).toBe('Ahırda yer kalmadı. Ahırı büyütebilirsin.');
+    expect(said()).toBe('Ahırda yer kalmadı. Ahırı büyütebilirsin.');
     start({ coins: 10_000, xp: 10_000, animals: Array.from({ length: COOP_CAPACITY }, () => animal('chicken')) });
     S().buyAnimal('chicken');
-    expect(S().events[0].text).toBe('Kümeste yer kalmadı. Kümesi büyütebilirsin.');
+    expect(said()).toBe('Kümeste yer kalmadı. Kümesi büyütebilirsin.');
     S().buyAnimal('sheep');
     expect(S().animals.filter((a) => a.species === 'sheep')).toHaveLength(1);
   });
@@ -204,7 +206,7 @@ describe('selling animals', () => {
     expect(S().animals.map((a) => a.id)).toEqual([herd[3].id]);
     expect(S().coins).toBe(expected);
     expect(S().log.find((l) => l.day === 1)!.income).toBe(expected);
-    expect(S().events[0].text).toBe(`3 hayvan ${expected} altına satıldı.`);
+    expect(said()).toBe(`3 hayvan ${expected} altına satıldı.`);
   });
 
   it('heals the chosen sick ones, sickest first, as far as the medicine goes', () => {
@@ -213,7 +215,7 @@ describe('selling animals', () => {
     S().healMany(herd.map((a) => a.id));
     expect(S().animals.map((a) => a.health)).toEqual([60, 100, 100, 100]);
     expect(S().inventory.medicine).toBe(0);
-    expect(S().events[0].text).toBe('İlaç yetmedi: 2 hayvan iyileşti, 1 hayvan bekliyor.');
+    expect(said()).toBe('İlaç yetmedi: 2 hayvan iyileşti, 1 hayvan bekliyor.');
   });
 
   it('pets everyone chosen, and only them', () => {
@@ -275,7 +277,7 @@ describe('old saves', () => {
       incubator: undefined,
     };
     const s = migrate(v1, 1);
-    expect(s.version).toBe(9);
+    expect(s.version).toBe(10);
     expect(s.incubator).toEqual([]);
     expect(s.animals.every((a) => a.pregnantSince === null && a.sickHours === 0 && a.warnedSick === false)).toBe(true);
     expect(s.log[0]).toMatchObject({ births: 0, deaths: 0 });

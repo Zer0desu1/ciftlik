@@ -1,13 +1,15 @@
 import { router } from 'expo-router';
-import { AlertCircle, ChevronRight, Droplets, Fish, PawPrint, Sparkles, Sprout, Wheat } from 'lucide-react-native';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { AlertCircle, ChevronRight, Droplets, Fish, PawPrint, Settings, Sparkles, Sprout, Trophy, Wheat } from 'lucide-react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CoinIcon } from '@/components/art/items';
 import { FarmHero } from '@/components/art/farm-hero';
 import { FarmerAvatar, WeatherIcon } from '@/components/art/weather';
+import { OrderCard } from '@/components/orders';
 import { Bar, Card, IconBadge, Pill, Ring, Row, SectionHeader, Txt } from '@/components/ui';
-import { clockLabel, dayOf, greeting, hourOf, isNight, weatherFor, weatherLabel } from '@/game/clock';
+import { clockLabel, dayOf, greeting, hourOf, isNight, seasonLabel, weatherFor, weatherLabel } from '@/game/clock';
+import { ACHIEVEMENTS, HAPPENINGS } from '@/game/data';
 import {
   averageMoisture,
   farmHealth,
@@ -66,6 +68,7 @@ export default function HomeScreen() {
   const hl = healthLabel(health);
   const todo = tasks(state);
   const lvl = levelProgress(state.xp);
+  const claimable = ACHIEVEMENTS.filter((a) => state.achievements.includes(a.id) && !state.claimed.includes(a.id)).length;
 
   return (
     <View style={{ flex: 1, backgroundColor: C.page }}>
@@ -82,14 +85,19 @@ export default function HomeScreen() {
                 {state.farmName}
               </Txt>
             </View>
-            <View style={styles.coin}>
-              <CoinIcon size={18} />
-              <Txt v="label">{state.coins.toLocaleString('tr-TR')}</Txt>
+            <View style={{ alignItems: 'flex-end', gap: 6 }}>
+              <View style={styles.coin}>
+                <CoinIcon size={18} />
+                <Txt v="label">{state.coins.toLocaleString('tr-TR')}</Txt>
+              </View>
+              <Pressable accessibilityLabel="Ayarlar" onPress={() => router.push('/settings')} style={styles.gear}>
+                <Settings size={18} color={C.ink} />
+              </Pressable>
             </View>
           </View>
           <View style={[styles.clock, { top: insets.top + 78 }]}>
             <Txt v="caption" style={{ color: C.ink, fontFamily: F.semibold }}>
-              {day}. gün · {clockLabel(state.minutes)}
+              {seasonLabel(day)} · {clockLabel(state.minutes)}
             </Txt>
           </View>
         </View>
@@ -130,6 +138,32 @@ export default function HomeScreen() {
             </Row>
             <Bar value={(lvl.into / lvl.span) * 100} color={C.amber} track={C.amberSoft} />
           </Card>
+
+          {state.happening && state.happening.day === day ? (
+            <Card tint={HAPPENINGS[state.happening.kind].tone === 'good' ? C.greenSoft : C.roseSoft} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
+              <AlertCircle size={22} color={HAPPENINGS[state.happening.kind].tone === 'good' ? C.green : C.rose} />
+              <View style={{ flex: 1 }}>
+                <Txt v="label">{HAPPENINGS[state.happening.kind].name}</Txt>
+                <Txt v="caption">{state.happening.note}</Txt>
+              </View>
+            </Card>
+          ) : null}
+
+          <SectionHeader
+            title="Siparişler"
+            subtitle={state.orders.length ? `${state.orders.length} müşteri bekliyor` : 'Yarın sabah yeni müşteriler gelir'}
+            action={
+              <Pressable onPress={() => router.push('/goals')} style={styles.goalsLink}>
+                <Trophy size={14} color={C.amber} />
+                <Txt v="label" style={{ color: C.amber }}>
+                  Görevler{claimable ? ` · ${claimable} ödül` : ''}
+                </Txt>
+              </Pressable>
+            }
+          />
+          {state.orders.slice(0, 2).map((o) => (
+            <OrderCard key={o.id} order={o} />
+          ))}
 
           <SectionHeader title="Hızlı Bakış" />
           <Row gap={S.md}>
@@ -192,6 +226,23 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  gear: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFFE6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: C.amberSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: R.pill,
+  },
   heroTop: { position: 'absolute', left: S.xl, right: S.xl, flexDirection: 'row', alignItems: 'center', gap: S.md },
   coin: {
     flexDirection: 'row',

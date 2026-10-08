@@ -35,6 +35,11 @@ export type ItemId =
   | 'fish_carp'
   | 'fish_trout'
   | 'fish_catfish'
+  // made in the workshops
+  | 'cheese'
+  | 'flour'
+  | 'bread'
+  | 'jam'
   // supplies
   | 'hay'
   | 'grain'
@@ -42,7 +47,7 @@ export type ItemId =
   | 'fertilizer'
   | 'medicine';
 
-export type ItemKind = 'seed' | 'crop' | 'produce' | 'fish' | 'supply';
+export type ItemKind = 'seed' | 'crop' | 'produce' | 'fish' | 'goods' | 'supply';
 
 export type Item = {
   id: ItemId;
@@ -81,6 +86,11 @@ export const ITEMS: Record<ItemId, Item> = {
   fish_trout: { id: 'fish_trout', name: 'Alabalık', kind: 'fish', price: 30, unit: 'adet' },
   fish_catfish: { id: 'fish_catfish', name: 'Yayın balığı', kind: 'fish', price: 48, unit: 'adet' },
 
+  cheese: { id: 'cheese', name: 'Peynir', kind: 'goods', price: 40, unit: 'kalıp' },
+  flour: { id: 'flour', name: 'Un', kind: 'goods', price: 9, unit: 'çuval' },
+  bread: { id: 'bread', name: 'Ekmek', kind: 'goods', price: 16, unit: 'somun' },
+  jam: { id: 'jam', name: 'Reçel', kind: 'goods', price: 45, unit: 'kavanoz' },
+
   hay: { id: 'hay', name: 'Saman', kind: 'supply', price: 2, unit: 'balya' },
   grain: { id: 'grain', name: 'Tahıl yemi', kind: 'supply', price: 2, unit: 'kg' },
   fish_feed: { id: 'fish_feed', name: 'Balık yemi', kind: 'supply', price: 3, unit: 'kg' },
@@ -111,17 +121,19 @@ export type Crop = {
   level: number;
   /** Soil-moisture points lost per game hour. Thirsty crops dry faster. */
   thirst: number;
+  /** The seasons it can be sown in. Out of season it grows at half speed and sells dearer. */
+  seasons: Season[];
 };
 
 export const CROPS: Record<CropId, Crop> = {
-  lettuce: { id: 'lettuce', name: 'Marul', seed: 'seed_lettuce', harvest: 'lettuce', growHours: 6, yield: 3, level: 1, thirst: 5 },
-  wheat: { id: 'wheat', name: 'Buğday', seed: 'seed_wheat', harvest: 'wheat', growHours: 8, yield: 5, level: 1, thirst: 3 },
-  carrot: { id: 'carrot', name: 'Havuç', seed: 'seed_carrot', harvest: 'carrot', growHours: 10, yield: 4, level: 1, thirst: 4 },
-  tomato: { id: 'tomato', name: 'Domates', seed: 'seed_tomato', harvest: 'tomato', growHours: 14, yield: 5, level: 1, thirst: 6 },
-  corn: { id: 'corn', name: 'Mısır', seed: 'seed_corn', harvest: 'corn', growHours: 16, yield: 6, level: 2, thirst: 5 },
-  pepper: { id: 'pepper', name: 'Biber', seed: 'seed_pepper', harvest: 'pepper', growHours: 18, yield: 4, level: 3, thirst: 6 },
-  strawberry: { id: 'strawberry', name: 'Çilek', seed: 'seed_strawberry', harvest: 'strawberry', growHours: 20, yield: 3, level: 4, thirst: 7 },
-  pumpkin: { id: 'pumpkin', name: 'Bal kabağı', seed: 'seed_pumpkin', harvest: 'pumpkin', growHours: 30, yield: 2, level: 5, thirst: 5 },
+  lettuce: { id: 'lettuce', name: 'Marul', seed: 'seed_lettuce', harvest: 'lettuce', growHours: 6, yield: 3, level: 1, thirst: 5, seasons: ['spring', 'autumn'] },
+  wheat: { id: 'wheat', name: 'Buğday', seed: 'seed_wheat', harvest: 'wheat', growHours: 8, yield: 5, level: 1, thirst: 3, seasons: ['spring', 'autumn', 'winter'] },
+  carrot: { id: 'carrot', name: 'Havuç', seed: 'seed_carrot', harvest: 'carrot', growHours: 10, yield: 4, level: 1, thirst: 4, seasons: ['spring', 'autumn', 'winter'] },
+  tomato: { id: 'tomato', name: 'Domates', seed: 'seed_tomato', harvest: 'tomato', growHours: 14, yield: 5, level: 1, thirst: 6, seasons: ['spring', 'summer'] },
+  corn: { id: 'corn', name: 'Mısır', seed: 'seed_corn', harvest: 'corn', growHours: 16, yield: 6, level: 2, thirst: 5, seasons: ['summer'] },
+  pepper: { id: 'pepper', name: 'Biber', seed: 'seed_pepper', harvest: 'pepper', growHours: 18, yield: 4, level: 3, thirst: 6, seasons: ['summer'] },
+  strawberry: { id: 'strawberry', name: 'Çilek', seed: 'seed_strawberry', harvest: 'strawberry', growHours: 20, yield: 3, level: 4, thirst: 7, seasons: ['spring', 'summer'] },
+  pumpkin: { id: 'pumpkin', name: 'Bal kabağı', seed: 'seed_pumpkin', harvest: 'pumpkin', growHours: 30, yield: 2, level: 5, thirst: 5, seasons: ['summer', 'autumn'] },
 };
 
 export type FieldId = 'tomatoes' | 'vegetables' | 'corn' | 'east' | 'orchard' | 'meadow' | 'south' | 'creek' | 'far';
@@ -399,3 +411,110 @@ export const MACHINES: Record<MachineId, Machine> = {
   solar_pump: { id: 'solar_pump', name: 'Güneş Enerjili Pompa', does: 'Gündüzleri su deposunu kendiliğinden doldurur. Kendi panelinden beslenir.', price: 400, level: 3, zone: 'water', power: 0 },
   planter: { id: 'planter', name: 'Ekim Robotu', does: 'Boşalan ya da kuruyan parsellere tohum varsa yeniden eker.', price: 600, level: 4, zone: 'fields', power: 0.5 },
 };
+
+// ---------------------------------------------------------------------------
+// Seasons
+
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+
+/** Game days in a season; a year is four of them. */
+export const SEASON_DAYS = 5;
+
+export const SEASONS: Record<Season, { name: string; blurb: string; temp: number }> = {
+  spring: { name: 'İlkbahar', blurb: 'Ekim zamanı: marul, havuç, domates, çilek, buğday.', temp: 0 },
+  summer: { name: 'Yaz', blurb: 'Sıcak ve kurak: mısır, biber, domates, çilek, kabak.', temp: 5 },
+  autumn: { name: 'Sonbahar', blurb: 'Hasat mevsimi: kabak, marul, havuç, buğday.', temp: -5 },
+  winter: { name: 'Kış', blurb: 'Tarla dinlenir: yalnız buğday ve havuç. Hayvanlar daha çok yer.', temp: -14 },
+};
+
+export const SEASON_ORDER: Season[] = ['spring', 'summer', 'autumn', 'winter'];
+
+/** Animals eat this much more in the cold. */
+export const WINTER_HUNGER = 1.3;
+
+// ---------------------------------------------------------------------------
+// Workshops: raw goods in, dearer goods out
+
+export type WorkshopId = 'mill' | 'dairy' | 'bakery' | 'jam';
+
+export type Workshop = {
+  id: WorkshopId;
+  name: string;
+  /** One batch takes these from the barn... */
+  inputs: { item: ItemId; qty: number }[];
+  /** ...and gives this, after `hours`. */
+  output: ItemId;
+  hours: number;
+  price: number;
+  level: number;
+  /** Electricity drawn while a batch is on, kWh a game hour. */
+  power: number;
+};
+
+export const WORKSHOPS: Record<WorkshopId, Workshop> = {
+  mill: { id: 'mill', name: 'Değirmen', inputs: [{ item: 'wheat', qty: 3 }], output: 'flour', hours: 3, price: 400, level: 2, power: 0.4 },
+  dairy: { id: 'dairy', name: 'Mandıra', inputs: [{ item: 'milk', qty: 3 }], output: 'cheese', hours: 4, price: 600, level: 3, power: 0.6 },
+  bakery: { id: 'bakery', name: 'Fırın', inputs: [{ item: 'flour', qty: 1 }, { item: 'egg', qty: 1 }], output: 'bread', hours: 3, price: 700, level: 3, power: 0.8 },
+  jam: { id: 'jam', name: 'Reçel Atölyesi', inputs: [{ item: 'strawberry', qty: 4 }], output: 'jam', hours: 5, price: 800, level: 4, power: 0.5 },
+};
+
+/** Batches a workshop can have on at once. */
+export const WORKSHOP_SLOTS = 3;
+
+// ---------------------------------------------------------------------------
+// Orders and achievements
+
+/** Who might ask for something. */
+export const CUSTOMERS = ['Köy bakkalı', 'Fırıncı Ayşe', 'Lokanta Lezzet', 'Okul kantini', 'Mehmet Amca', 'Kasaba pazarı', 'Kafe Çınaraltı', 'Otel Yayla'];
+
+/** Orders open at once. */
+export const MAX_ORDERS = 3;
+
+export type StatId = 'harvested' | 'collected' | 'caught' | 'born' | 'orders' | 'crafted';
+
+export type Achievement = {
+  id: string;
+  name: string;
+  goal: string;
+  reward: number;
+  /** How far along the farm is, against `target`. */
+  measure: { stat: StatId } | { count: 'cows' | 'chickens' | 'land' | 'panels' | 'level' | 'coins' };
+  target: number;
+};
+
+export const ACHIEVEMENTS: Achievement[] = [
+  { id: 'harvest_1', name: 'İlk hasat', goal: 'Bir parsel hasat et', reward: 20, measure: { stat: 'harvested' }, target: 1 },
+  { id: 'harvest_100', name: 'Bereketli toprak', goal: '100 birim ürün hasat et', reward: 150, measure: { stat: 'harvested' }, target: 100 },
+  { id: 'harvest_1000', name: 'Tarlaların efendisi', goal: '1.000 birim ürün hasat et', reward: 800, measure: { stat: 'harvested' }, target: 1000 },
+  { id: 'collect_50', name: 'Süt, yumurta, yün', goal: 'Hayvanlardan 50 ürün topla', reward: 120, measure: { stat: 'collected' }, target: 50 },
+  { id: 'fish_20', name: 'Balıkçı', goal: '20 balık tut', reward: 150, measure: { stat: 'caught' }, target: 20 },
+  { id: 'born_5', name: 'Yeni hayat', goal: '5 yavru doğsun', reward: 150, measure: { stat: 'born' }, target: 5 },
+  { id: 'cows_10', name: 'Büyük sürü', goal: '10 ineğin olsun', reward: 300, measure: { count: 'cows' }, target: 10 },
+  { id: 'chickens_20', name: 'Kümes dolu', goal: '20 tavuğun olsun', reward: 200, measure: { count: 'chickens' }, target: 20 },
+  { id: 'orders_1', name: 'İlk müşteri', goal: 'Bir siparişi teslim et', reward: 50, measure: { stat: 'orders' }, target: 1 },
+  { id: 'orders_10', name: 'Güvenilir çiftlik', goal: '10 siparişi teslim et', reward: 300, measure: { stat: 'orders' }, target: 10 },
+  { id: 'orders_50', name: 'Kasabanın gözdesi', goal: '50 siparişi teslim et', reward: 1500, measure: { stat: 'orders' }, target: 50 },
+  { id: 'crafted_10', name: 'Usta eller', goal: 'Atölyelerde 10 ürün yap', reward: 200, measure: { stat: 'crafted' }, target: 10 },
+  { id: 'land_3', name: 'Toprak sahibi', goal: '3 arazi satın al', reward: 400, measure: { count: 'land' }, target: 3 },
+  { id: 'panels_6', name: 'Kendi elektriğin', goal: 'Çatıya 6 güneş paneli kur', reward: 250, measure: { count: 'panels' }, target: 6 },
+  { id: 'level_5', name: 'Deneyimli çiftçi', goal: '5. seviyeye ulaş', reward: 300, measure: { count: 'level' }, target: 5 },
+  { id: 'coins_5000', name: 'Kasada para', goal: 'Kasada 5.000 altın biriktir', reward: 500, measure: { count: 'coins' }, target: 5000 },
+];
+
+// ---------------------------------------------------------------------------
+// Things that happen
+
+export type HappeningKind = 'fox' | 'drought' | 'locusts' | 'boom';
+
+export const HAPPENINGS: Record<HappeningKind, { name: string; blurb: string; tone: 'good' | 'bad' }> = {
+  fox: { name: 'Tilki', blurb: 'Gece bir tilki kümese dadandı.', tone: 'bad' },
+  drought: { name: 'Kuraklık', blurb: 'Bugün yağmur yok, tarlalar iki kat çabuk kurur.', tone: 'bad' },
+  locusts: { name: 'Çekirge', blurb: 'Çekirge sürüsü tarlaları kemirdi.', tone: 'bad' },
+  boom: { name: 'Fiyat patlaması', blurb: 'Pazarda bir ürünün fiyatı bugün iki katı.', tone: 'good' },
+};
+
+/** Chance each morning that something happens. */
+export const HAPPENING_CHANCE = 0.3;
+
+/** A watchdog keeps the fox off; this is what one costs. */
+export const DOG_PRICE = 350;

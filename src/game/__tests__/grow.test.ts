@@ -23,6 +23,8 @@ import {
 const T0 = 1_000_000_000_000;
 let now = T0;
 const S = () => useGame.getState();
+/** The last thing the game said, leaving aside achievements it noticed along the way. */
+const said = () => S().events.find((e) => !e.text.startsWith('Başarım açıldı'))!.text;
 function start(patch: Partial<GameState> = {}) {
   now = T0;
   useGame.setState({ ...initialState(T0), minutes: 0, events: [], ...patch });
@@ -168,7 +170,7 @@ describe('land', () => {
     expect(S().land.east).toBe('empty');
     expect(S().fields.east).toEqual([]);
     expect(farmArea(S())).toBe(area + LAND_AREA);
-    expect(S().events[0].text).toBe('Doğu Arazisi senin! Ne olacağını seçmek için haritada araziye dokun.');
+    expect(said()).toBe('Doğu Arazisi senin! Ne olacağını seçmek için haritada araziye dokun.');
     useGame.setState({ coins: LAND_USES.pond.cost, xp: MAX_XP });
     S().convertLand('east', 'pond');
     expect(S().land.east).toBe('pond');
@@ -195,7 +197,7 @@ describe('land', () => {
     start({ coins: RICH, xp: 0 });
     S().buyLand('far');
     expect(S().fields.far).toHaveLength(0);
-    expect(S().events[0].text).toBe(`Bunun için seviye ${far.land!.level} gerekli.`);
+    expect(said()).toBe(`Bunun için seviye ${far.land!.level} gerekli.`);
     start({ coins: RICH });
     S().buyLand('east');
     S().buyLand('east');
@@ -251,7 +253,7 @@ describe('what the land is for', () => {
     rich();
     S().convertLand('tomatoes', 'barn');
     expect(S().land.tomatoes).toBe('field');
-    expect(S().events[0].text).toContain('ekin var: hasat et ya da tarlayı boz');
+    expect(said()).toContain('ekin var: hasat et ya da tarlayı boz');
     useGame.setState({ fields: { ...S().fields, tomatoes: S().fields.tomatoes.map(() => S().fields.tomatoes[5]) } });
     const barn = barnCapacity(S());
     S().convertLand('tomatoes', 'barn');
@@ -259,7 +261,7 @@ describe('what the land is for', () => {
     expect(S().fields.tomatoes).toEqual([]);
     expect(barnCapacity(S())).toBe(barn + LAND_USES.barn.adds);
     expect(S().coins).toBe(RICH - LAND_USES.barn.cost);
-    expect(S().events[0].text).toBe('Domates Tarlası artık Kuzey Ahırı.');
+    expect(said()).toBe('Domates Tarlası artık Kuzey Ahırı.');
     S().convertLand('tomatoes', 'field');
     expect(S().fields.tomatoes).toHaveLength(BASE_PLOTS);
   });
@@ -272,9 +274,9 @@ describe('what the land is for', () => {
     expect(S().land.tomatoes).toBe('empty');
     expect(S().fields.tomatoes).toEqual([]);
     expect(S().coins).toBe(RICH);
-    expect(S().events[0].text).toBe(`Domates Tarlası artık Kuzey Arazisi. ${growing} ekin söküldü.`);
+    expect(said()).toBe(`Domates Tarlası artık Kuzey Arazisi. ${growing} ekin söküldü.`);
     S().expandField('tomatoes');
-    expect(S().events[0].text).toBe('Bu arazi tarla değil.');
+    expect(said()).toBe('Bu arazi tarla değil.');
   });
 
   it('a barn or pond cannot be taken away while the animals or fish would not fit', () => {
@@ -283,7 +285,7 @@ describe('what the land is for', () => {
     useGame.setState({ animals: Array.from({ length: barnCapacity(S()) }, () => animal('cow')) });
     S().convertLand('east', 'field');
     expect(S().land.east).toBe('barn');
-    expect(S().events[0].text).toBe(`Hayvanlar (doğacaklar dahil) kalan ahıra sığmaz: önce ${LAND_USES.barn.adds} hayvan sat.`);
+    expect(said()).toBe(`Hayvanlar (doğacaklar dahil) kalan ahıra sığmaz: önce ${LAND_USES.barn.adds} hayvan sat.`);
     S().buyLand('orchard', 'pond');
     useGame.setState({ pond: { ...S().pond, batches: [fish(pondCapacity(S()))] } });
     S().convertLand('orchard', 'tank');
@@ -325,7 +327,7 @@ describe('the farm', () => {
   it('a version-2 save loads as it was built', () => {
     const v2 = { ...initialState(T0), version: 2, upgrades: undefined };
     const s = migrate(v2, 2);
-    expect(s.version).toBe(9);
+    expect(s.version).toBe(10);
     expect(s.upgrades).toEqual({ barn: 0, coop: 0, pond: 0, tank: 0 });
     expect(barnCapacity(s)).toBe(FACILITIES.barn.base);
   });

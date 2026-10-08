@@ -6,17 +6,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CoinIcon, ItemIcon } from '@/components/art/items';
 import { Button, Card, Chip, Pill, Row, SectionHeader, Txt } from '@/components/ui';
-import { dayOf } from '@/game/clock';
-import { CROPS, ITEMS, type ItemId, type ItemKind } from '@/game/data';
-import { buyPrice, levelOf, priceMultiplier, sellPrice, useGame } from '@/game/store';
+import { dayOf, seasonOf } from '@/game/clock';
+import { CROPS, ITEMS, SEASONS, type ItemId, type ItemKind } from '@/game/data';
+import { buyPrice, happeningFor, levelOf, priceMultiplier, sellPrice, useGame } from '@/game/store';
 import { C, F, R, S } from '@/theme';
 
 const SUPPLIES: ItemId[] = ['hay', 'grain', 'fish_feed', 'fertilizer', 'medicine'];
 const SELL_GROUPS: { kind: ItemKind; title: string }[] = [
+  { kind: 'goods', title: 'İşlenmiş ürünler' },
   { kind: 'crop', title: 'Tarla ürünleri' },
   { kind: 'produce', title: 'Hayvan ürünleri' },
   { kind: 'fish', title: 'Balıklar' },
 ];
+
+/** The seasons a seed can go in, for the seed rows. */
+function seasonsOf(id: ItemId): string | null {
+  const crop = Object.values(CROPS).find((c) => c.seed === id);
+  return crop ? crop.seasons.map((x) => SEASONS[x].name).join(', ') : null;
+}
 
 function seedLevel(id: ItemId): number {
   return Object.values(CROPS).find((c) => c.seed === id)?.level ?? 1;
@@ -24,6 +31,9 @@ function seedLevel(id: ItemId): number {
 
 function BuyRow({ id, locked }: { id: ItemId; locked: boolean }) {
   const have = useGame((s) => s.inventory[id] ?? 0);
+  const season = useGame((s) => seasonOf(dayOf(s.minutes)));
+  const crop = Object.values(CROPS).find((c) => c.seed === id);
+  const inSeason = !crop || crop.seasons.includes(season);
   const coins = useGame((s) => s.coins);
   const item = ITEMS[id];
   const price = buyPrice(id);
@@ -39,6 +49,11 @@ function BuyRow({ id, locked }: { id: ItemId; locked: boolean }) {
             {price} / {item.unit} · elinde {have}
           </Txt>
         </Row>
+        {crop ? (
+          <Txt v="caption" style={{ color: inSeason ? C.green : C.amber }} numberOfLines={1}>
+            {inSeason ? 'Mevsimi' : 'Mevsim dışı, yavaş büyür'} · {seasonsOf(id)}
+          </Txt>
+        ) : null}
       </View>
       {locked ? (
         <Row gap={4}>
@@ -62,6 +77,8 @@ function SellRow({ id }: { id: ItemId }) {
   const price = sellPrice(day, id);
   const sell = useGame.getState().sell;
   const up = mult >= 1;
+  const h = happeningFor(day);
+  const boom = h?.kind === 'boom' && h.item === id;
   return (
     <Card style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, padding: S.md }}>
       <ItemIcon id={id} size={44} />
@@ -72,6 +89,7 @@ function SellRow({ id }: { id: ItemId }) {
           <Txt v="caption" style={{ color: C.ink, fontFamily: F.semibold }}>{price}</Txt>
           {up ? <TrendingUp size={14} color={C.greenMid} /> : <TrendingDown size={14} color={C.rose} />}
           <Txt v="caption">× {have}</Txt>
+          {boom ? <Pill text="Bugün 2 kat!" tone="green" /> : null}
         </Row>
       </View>
       <Row gap={6}>
@@ -98,7 +116,9 @@ export default function MarketScreen() {
         <Row style={{ justifyContent: 'space-between' }}>
           <View>
             <Txt v="display">Pazar</Txt>
-            <Txt v="caption">{day}. günün fiyatları</Txt>
+            <Txt v="caption">
+              {day}. günün fiyatları · {SEASONS[seasonOf(day)].name}
+            </Txt>
           </View>
           <Row gap={6} style={{ backgroundColor: C.card, paddingHorizontal: 14, paddingVertical: 9, borderRadius: R.pill }}>
             <CoinIcon size={18} />
@@ -110,6 +130,21 @@ export default function MarketScreen() {
           <Chip label="Sat" active={tab === 'sell'} onPress={() => setTab('sell')} />
           <Chip label="Al" active={tab === 'buy'} onPress={() => setTab('buy')} />
         </Row>
+
+        {(() => {
+          const h = happeningFor(day);
+          return h?.kind === 'boom' && h.item ? (
+            <Card tint={C.greenSoft} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
+              <ItemIcon id={h.item} size={36} />
+              <Txt v="label" style={{ flex: 1, color: C.green }}>
+                Fiyat patlaması: {ITEMS[h.item].name} bugün iki katına satılıyor!
+              </Txt>
+            </Card>
+          ) : null;
+        })()}
+        <Card tint={C.amberSoft}>
+          <Txt v="caption">Mevsim dışındaki tarla ürünleri %40 daha pahalıya satılır.</Txt>
+        </Card>
 
         {tab === 'buy' ? (
           <>

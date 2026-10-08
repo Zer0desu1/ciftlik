@@ -52,6 +52,17 @@ npm test           # oyun kurallarının testleri
 - **Makineler:** 10 makine ve robot (otomatik sulama, çapa, hasat ve ekim robotları, otomatik
   yemlik, toplama ve temizlik robotları, balık yemleme makinesi, havuz filtresi, güneş enerjili
   pompa) bir kez alınır ve açık kaldıkça işini kendisi yapar; yemi, tohumu ve suyu stoktan kullanır.
+- **Mevsimler:** İlkbahar, yaz, sonbahar ve kış, her biri 5 gün. Mevsimine uygun ürün tam hızda
+  büyür; mevsim dışı ürün yarı hızda (kışın %30) büyür ama pazarda %40 pahalı satılır. Yaz sıcak ve
+  kurak, kış soğuk; kışın hayvanlar %30 daha çok yer.
+- **Atölyeler:** Değirmen (buğday → un), mandıra (süt → peynir), fırın (un + yumurta → ekmek) ve
+  reçel atölyesi (çilek → reçel). Her biri 3 partiyi sıraya alır ve çalışırken elektrik harcar.
+- **Siparişler ve başarımlar:** Her sabah müşteriler gelir (en fazla 3 sipariş), zamanında teslim
+  edilene normal fiyatın yaklaşık 2 katı ödenir. 16 başarım var; ödülleri Görevler ekranından alınır.
+- **Olaylar:** Bazı sabahlar tilki kümese dadanır (bekçi köpeği önler), kuraklık olur (yağmur yok,
+  tarlalar 2 kat çabuk kurur), çekirge gelir (büyüyen ekinler geri kalır) ya da bir ürünün fiyatı
+  o gün iki katına çıkar.
+- **Ayarlar:** Çiftliğin adı değiştirilir, oyun sıfırlanır.
 - **Pazar:** Fiyatlar her gün değişir. Seviye atladıkça yeni tohum, hayvan ve balıklar açılır.
 - **Hava:** Her gün yeni hava; yağmur tarlaları sular, su deposunu ve havuzu doldurur.
 

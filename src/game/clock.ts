@@ -1,4 +1,4 @@
-import { WEATHER, type WeatherKind } from './data';
+import { SEASON_DAYS, SEASON_ORDER, SEASONS, WEATHER, type Season, type WeatherKind } from './data';
 
 /** One real second is one game minute: a game hour a minute, a day in 24 minutes. */
 export const GAME_MINUTES_PER_SECOND = 1;
@@ -58,9 +58,26 @@ const TEMP: Record<WeatherKind, [number, number]> = {
   storm: [12, 17],
 };
 
+/** The season a game day falls in: five days each, spring first. */
+export function seasonOf(day: number): Season {
+  return SEASON_ORDER[Math.floor((Math.max(1, day) - 1) / SEASON_DAYS) % SEASON_ORDER.length];
+}
+
+/** Which day of its season a day is, from 1. */
+export function seasonDay(day: number): number {
+  return ((Math.max(1, day) - 1) % SEASON_DAYS) + 1;
+}
+
+export function seasonLabel(day: number): string {
+  return `${SEASONS[seasonOf(day)].name} · ${seasonDay(day)}. gün`;
+}
+
 export function weatherFor(day: number): DayWeather {
   const rand = seeded(day * 9973 + 17);
-  const roll = rand();
+  const season = seasonOf(day);
+  // Summer is drier, winter greyer: shift the roll toward sun or cloud.
+  const shift = season === 'summer' ? -0.12 : season === 'winter' ? 0.14 : 0;
+  const roll = Math.min(0.999, Math.max(0, rand() + shift));
   // Day one is always fair: nobody's first look at the farm should be a storm.
   const kind: WeatherKind =
     day === 1
@@ -75,7 +92,7 @@ export function weatherFor(day: number): DayWeather {
               ? 'rain'
               : 'storm';
   const [lo, hi] = TEMP[kind];
-  return { kind, temp: Math.round(lo + rand() * (hi - lo)) };
+  return { kind, temp: Math.round(lo + rand() * (hi - lo) + SEASONS[season].temp) };
 }
 
 export function weatherLabel(kind: WeatherKind): string {

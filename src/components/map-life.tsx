@@ -4,8 +4,9 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AnimalArt, FishArt } from '@/components/art/animals';
 import { RobotSprite } from '@/components/art/machines';
+import { WorkshopMapIcon } from '@/components/art/workshops';
 import { dayOf, weatherFor } from '@/game/clock';
-import { MACHINES, WIND, type FieldId, type LandUse, type MachineId, type SpeciesId } from '@/game/data';
+import { MACHINES, WIND, type FieldId, type LandUse, type MachineId, type SpeciesId, type WorkshopId } from '@/game/data';
 import { isAdult, type GameState } from '@/game/store';
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -287,12 +288,25 @@ export function MapLife({ state, view, land }: { state: GameState; view: View_; 
     }
   });
 
+  // Workshops built stand along the storage yard, a little puff of work on them when busy.
+  const shops = (Object.keys(state.workshops ?? {}) as WorkshopId[]).map((id, i) => {
+    const size = 22 * view.scale;
+    return (
+      <View
+        key={`shop-${id}`}
+        pointerEvents="none"
+        style={{ position: 'absolute', left: (268 + i * 21 - view.x) * view.scale, top: (327 - view.y) * view.scale, width: size, height: size }}>
+        <WorkshopMapIcon id={id} size={size} busy={!!state.workshops[id]?.jobs.length} />
+      </View>
+    );
+  });
   const wind = WIND[weatherFor(day).kind];
   const blades = TURBINES.slice(0, state.power.turbines).map((t, i) => <Blades key={`turbine-${i}`} at={t} view={view} wind={wind} />);
 
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}>
       {blades}
+      {shops}
       {fish}
       {herd}
       {robots}

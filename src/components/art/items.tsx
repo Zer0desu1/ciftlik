@@ -238,7 +238,102 @@ function Medicine() {
   );
 }
 
+function Cheese() {
+  return (
+    <G>
+      <GroundShadow w={24} />
+      <Path d="M8 32 L56 32 L56 53 Q56 57 52 57 L12 57 Q8 57 8 53 Z" fill="#F2C14E" />
+      <Path d="M44 32 L56 32 L56 53 Q56 57 52 57 L44 57 Z" fill="#E3A82B" />
+      <Path d="M8 32 L43 13 Q47 11 50 14 L56 32 Z" fill="#FBDB7A" />
+      <Path d="M8 32 L56 32" stroke="#E3A82B" strokeWidth={1.4} strokeLinecap="round" />
+      <Ellipse cx={37} cy={23} rx={3.4} ry={1.8} fill="#EBB943" />
+      <Ellipse cx={24} cy={28} rx={2.2} ry={1.2} fill="#EBB943" />
+      <Circle cx={18} cy={41} r={4} fill="#D99A22" />
+      <Circle cx={33} cy={48} r={3} fill="#D99A22" />
+      <Circle cx={36} cy={38} r={2.2} fill="#D99A22" />
+      <Circle cx={49} cy={44} r={3} fill="#C98A1B" />
+      <Circle cx={21} cy={52} r={1.8} fill="#D99A22" />
+      <Path d="M14 36 L30 36" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" opacity={0.6} />
+    </G>
+  );
+}
+
+function Flour() {
+  return (
+    <G>
+      <Ellipse cx={11} cy={57} rx={7} ry={2.6} fill="#FFFFFF" stroke="#E6DED0" strokeWidth={0.8} />
+      <Sack
+        body="#F6F1E7"
+        dark="#D9CFBD"
+        label={
+          <G>
+            <Rect x={19} y={31} width={25} height={19} rx={5} fill="#FFFFFF" stroke="#3C7FB5" strokeWidth={1.6} />
+            <G transform="translate(21 30) scale(0.32)">
+              <ProduceShape crop="wheat" />
+            </G>
+            <Path d="M13.5 36 Q32 39 50.5 36 M13 54 Q32 57 51 54" stroke="#3C7FB5" strokeWidth={2.2} fill="none" opacity={0.85} />
+          </G>
+        }
+      />
+      <Circle cx={54} cy={56} r={1.4} fill="#FFFFFF" stroke="#E6DED0" strokeWidth={0.6} />
+      <Circle cx={57.5} cy={53.5} r={1} fill="#FFFFFF" stroke="#E6DED0" strokeWidth={0.6} />
+    </G>
+  );
+}
+
+function Bread() {
+  return (
+    <G>
+      <GroundShadow w={25} y={57} />
+      <Path d="M7 44 Q7 22 32 21 Q57 22 57 44 Q57 55 47 55 L17 55 Q7 55 7 44 Z" fill="#C97F3A" />
+      <Path d="M8 42 Q9 24 32 23 Q55 24 56 42 Q56 49 47 49 L17 49 Q8 49 8 42 Z" fill="#DE9A4F" />
+      <Path d="M42 25 Q55 29 56 42 Q56 49 47 49 L44 49 Q50 44 49 36 Q48 29 42 25 Z" fill="#C97F3A" opacity={0.6} />
+      <Ellipse cx={20} cy={36} rx={6} ry={2.2} fill="#F3D29A" transform="rotate(-50 20 36)" />
+      <Ellipse cx={31} cy={34} rx={6.5} ry={2.2} fill="#F3D29A" transform="rotate(-50 31 34)" />
+      <Ellipse cx={42} cy={36} rx={6} ry={2.2} fill="#F3D29A" transform="rotate(-50 42 36)" />
+      <Path d="M14 30 Q19 26 25 25" stroke="#FFFFFF" strokeWidth={2.4} fill="none" strokeLinecap="round" opacity={0.45} />
+    </G>
+  );
+}
+
+function Jam() {
+  return (
+    <G>
+      <GroundShadow w={18} />
+      <Path d="M19 24 L45 24 Q49 24 49 29 L49 53 Q49 59 43 59 L21 59 Q15 59 15 53 L15 29 Q15 24 19 24 Z" fill="#C7362B" />
+      <Path d="M38 24 L45 24 Q49 24 49 29 L49 53 Q49 59 43 59 L39 59 Q43 56 43 51 L43 30 Q43 26 38 24 Z" fill="#A42A22" />
+      <Path d="M19 24 L45 24 Q49 24 49 29 L49 53 Q49 59 43 59 L21 59 Q15 59 15 53 L15 29 Q15 24 19 24 Z" fill="none" stroke="#E9A4A0" strokeWidth={1.2} />
+      <Rect x={19} y={37} width={26} height={15} rx={3} fill="#FFF8EC" />
+      <G transform="translate(25.5 37) scale(0.21)">
+        <ProduceShape crop="strawberry" />
+      </G>
+      <Rect x={18.5} y={28} width={3} height={22} rx={1.5} fill="#FFFFFF" opacity={0.45} />
+      <Rect x={17} y={18} width={30} height={7} rx={2} fill="#E9DFD0" />
+      <Path d="M11 21 Q13 12 22 11 L42 11 Q51 12 53 21 L50 24 L46 21.5 L42 24 L38 21.5 L34 24 L30 21.5 L26 24 L22 21.5 L18 24 L14 21.5 Z" fill="#FFFFFF" />
+      <Path d="M18 11.4 L17 22.5 M26 11 L26 23 M34 11 L34 23 M42 11 L42 23 M48 12.5 L49 22.5 M12 17 L52 17" stroke="#E06B55" strokeWidth={2.6} opacity={0.75} />
+      <Path d="M13 21 Q32 25 51 21" stroke="#B5594B" strokeWidth={1.6} fill="none" strokeLinecap="round" />
+    </G>
+  );
+}
+
+/** Items that are being added to `ItemId`; compared as strings so this compiles before and after. */
+type NewItemId = 'cheese' | 'flour' | 'bread' | 'jam';
+
 function IconBody({ id }: { id: ItemId }) {
+  switch (id as string) {
+    case 'cheese':
+      return <Cheese />;
+    case 'flour':
+      return <Flour />;
+    case 'bread':
+      return <Bread />;
+    case 'jam':
+      return <Jam />;
+  }
+  return <KnownIconBody id={id as Exclude<ItemId, NewItemId>} />;
+}
+
+function KnownIconBody({ id }: { id: Exclude<ItemId, NewItemId> }) {
   switch (id) {
     case 'seed_tomato':
       return <SeedPacket crop="tomato" />;
