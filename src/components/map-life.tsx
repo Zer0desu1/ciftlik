@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, Easing, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { AnimalArt, FishArt } from '@/components/art/animals';
 import { RobotSprite } from '@/components/art/machines';
-import { dayOf } from '@/game/clock';
-import { MACHINES, type FieldId, type LandUse, type MachineId, type SpeciesId } from '@/game/data';
+import { dayOf, weatherFor } from '@/game/clock';
+import { MACHINES, WIND, type FieldId, type LandUse, type MachineId, type SpeciesId } from '@/game/data';
 import { isAdult, type GameState } from '@/game/store';
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -52,6 +53,13 @@ const SPOT: Partial<Record<MachineId, { x: number; y: number }>> = {
 /** How many of each kind to draw, at most; past that the pen would be a blur. */
 const SHOW: Record<SpeciesId, number> = { cow: 6, sheep: 4, goat: 4, chicken: 8 };
 const SIZE: Record<SpeciesId, number> = { cow: 22, sheep: 18, goat: 18, chicken: 12 };
+
+/** Turbine hubs, as TURBINE_AT in farm-map (kept here to avoid an import cycle). */
+const TURBINES = [
+  { x: 101, y: 52 },
+  { x: 101, y: 78 },
+  { x: 14, y: 62 },
+];
 
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 const hashOf = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -133,6 +141,30 @@ function Wanderer({
       pointerEvents="none"
       style={{ position: 'absolute', width: s, height: s, transform: [{ translateX: x }, { translateY: y }, { translateY: bob }, { scaleX: facing }] }}>
       {children}
+    </Animated.View>
+  );
+}
+
+/** Turbine blades, turning faster the harder the wind blows. */
+function Blades({ at, view, wind }: { at: { x: number; y: number }; view: View_; wind: number }) {
+  const [turn] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 2600 / Math.max(0.3, wind), easing: Easing.linear, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [turn, wind]);
+  const size = 26 * view.scale;
+  const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{ position: 'absolute', left: (at.x - view.x) * view.scale - size / 2, top: (at.y - view.y) * view.scale - size / 2, width: size, height: size, transform: [{ rotate }] }}>
+      <Svg width={size} height={size} viewBox="-13 -13 26 26">
+        {[0, 120, 240].map((deg) => (
+          <Path key={deg} d="M0 0 L-1.6 -2 L0 -12 L1.6 -2 Z" fill="#FFFFFF" stroke="#C7CED6" strokeWidth={0.6} transform={`rotate(${deg})`} />
+        ))}
+        <Circle r={2} fill="#9AA3AC" />
+      </Svg>
     </Animated.View>
   );
 }
@@ -255,8 +287,12 @@ export function MapLife({ state, view, land }: { state: GameState; view: View_; 
     }
   });
 
+  const wind = WIND[weatherFor(day).kind];
+  const blades = TURBINES.slice(0, state.power.turbines).map((t, i) => <Blades key={`turbine-${i}`} at={t} view={view} wind={wind} />);
+
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}>
+      {blades}
       {fish}
       {herd}
       {robots}

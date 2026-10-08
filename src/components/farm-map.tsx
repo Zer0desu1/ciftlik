@@ -20,6 +20,13 @@ type Box = { x: number; y: number; w: number; h: number };
  */
 export const WORLD = { w: 560, h: 480 };
 
+/** Where each wind turbine's hub stands, in the house's plot (map-life spins the blades there). */
+export const TURBINE_AT = [
+  { x: 101, y: 52 },
+  { x: 101, y: 78 },
+  { x: 14, y: 62 },
+];
+
 export const ZONES: Record<ZoneId, Box & { label: string }> = {
   house: { x: 8, y: 8, w: 104, h: 104, label: 'Ev' },
   tomatoes: { x: 120, y: 8, w: 232, h: 104, label: 'Domates' },
@@ -302,21 +309,22 @@ function House({ panels, turbines }: { panels: number; turbines: number }) {
       {[0, 1, 2, 3].map((k) => (
         <Circle key={k} cx={z.x + 21 + k * 6} cy={z.y + 89} r={2} fill={['#E04F5F', '#F2C94C', '#9B59B6', '#F2994A'][k]} />
       ))}
-      {/* Roof panels, two rows of three. */}
-      {Array.from({ length: panels }).map((_, i) => (
-        <Rect key={i} x={z.x + 27 + (i % 3) * 14} y={z.y + 43 + Math.floor(i / 3) * 7} width={12} height={6} rx={1} fill="#2F4F7A" stroke="#6E8FBF" strokeWidth={0.6} />
-      ))}
-      {/* Turbines along the side of the plot. */}
-      {Array.from({ length: turbines }).map((_, i) => {
-        const tx = z.x + 92 - i * 10;
-        const ty = z.y + 44 + i * 12;
+      {/* Roof panels, two rows of three, covering the roof as they are added. */}
+      {Array.from({ length: panels }).map((_, i) => {
+        const px = z.x + 25 + (i % 3) * 15;
+        const py = z.y + 41 + Math.floor(i / 3) * 10;
         return (
           <G key={i}>
-            <Path d={`M${tx} ${ty} V${ty + 24}`} stroke="#E6E9EC" strokeWidth={2} />
-            <Path d={`M${tx} ${ty} l0 -9 M${tx} ${ty} l8 5 M${tx} ${ty} l-8 5`} stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
-            <Circle cx={tx} cy={ty} r={1.8} fill="#9AA3AC" />
+            <Rect x={px} y={py} width={14} height={9} rx={1.2} fill="#24467A" stroke="#BFD3F0" strokeWidth={0.8} />
+            <Path d={`M${px + 4.7} ${py} V${py + 9} M${px + 9.3} ${py} V${py + 9} M${px} ${py + 4.5} H${px + 14}`} stroke="#5D86C2" strokeWidth={0.6} />
+            <Path d={`M${px + 1.5} ${py + 7.5} L${px + 5} ${py + 1.5}`} stroke="#FFFFFF88" strokeWidth={1} />
           </G>
         );
+      })}
+      {/* The turbines' masts; their blades turn on the moving layer (map-life). */}
+      {Array.from({ length: turbines }).map((_, i) => {
+        const t = TURBINE_AT[i];
+        return <Path key={i} d={`M${t.x} ${t.y} V${t.y + 26}`} stroke="#D9DEE3" strokeWidth={2.4} strokeLinecap="round" />;
       })}
       <Circle cx={z.x + 14} cy={z.y + 36} r={7} fill="#3E8A57" />
       <Circle cx={z.x + 92} cy={z.y + 36} r={8} fill="#3E8A57" />
@@ -726,7 +734,17 @@ export function FarmMap({
                     strokeWidth={2.5}
                   />
                 ) : null}
-                <Label zone={zone} active={selected === zone} text={field && use ? landName(field, use) : undefined} />
+                <Label
+                  zone={zone}
+                  active={selected === zone}
+                  text={
+                    field && use
+                      ? landName(field, use)
+                      : zone === 'house' && state.power.panels + state.power.turbines
+                        ? `Ev · ${[state.power.panels ? `${state.power.panels} panel` : '', state.power.turbines ? `${state.power.turbines} türbin` : ''].filter(Boolean).join(', ')}`
+                        : undefined
+                  }
+                />
               </G>
             );
           })}

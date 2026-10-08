@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Bot, Home, Lock, PlugZap, Sun, Wind, Zap } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { CoinIcon } from '@/components/art/items';
 import { Button, Card, IconBadge, Pill, Row, Screen, SectionHeader, Txt, TopBar } from '@/components/ui';
@@ -52,6 +52,13 @@ function BuildCard({
           <Txt v="caption">{sub}</Txt>
         </View>
         <Pill text={`${count} / ${max}`} tone={count ? 'green' : 'muted'} />
+      </Row>
+      <Row gap={6} style={{ flexWrap: 'wrap' }}>
+        {Array.from({ length: max }).map((_, i) => (
+          <View key={i} style={[styles.slot, i < count ? styles.slotOn : null]}>
+            {i < count ? icon : <Txt v="caption">boş</Txt>}
+          </View>
+        ))}
       </Row>
       {full ? (
         <Pill text="Bütün yerler dolu" tone="green" />
@@ -204,3 +211,17 @@ export default function PowerScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  slot: {
+    width: 44,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: C.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotOn: { borderStyle: 'solid', borderColor: C.amber, backgroundColor: C.amberSoft },
+});
