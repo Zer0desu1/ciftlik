@@ -117,7 +117,7 @@ export type Power = {
 export type FarmEvent = { id: number; at: number; text: string; tone: 'good' | 'bad' | 'info' };
 
 export type GameState = {
-  version: 8;
+  version: 9;
   farmName: string;
   /** Game time, in minutes since day 1, 00:00. */
   minutes: number;
@@ -317,7 +317,7 @@ export function initialState(now = Date.now()): GameState {
   };
   const land: GameState['land'] = { tomatoes: 'field', vegetables: 'field', corn: 'field' };
   return {
-    version: 8,
+    version: 9,
     farmName: 'Yeşil Vadi Çiftliği',
     land,
     power: { panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] },
@@ -348,7 +348,8 @@ export function initialState(now = Date.now()): GameState {
     meals: { day: 1, done: [false, false, false] },
     log: [{ day: 1, income: 0, expense: 0, crops: 0, produce: 0, fish: 0, births: 0, deaths: 0 }],
     events: [{ id: 1, at: 7 * 60, text: 'Çiftliğe hoş geldin! Önce hayvanları besle.', tone: 'info' }],
-    nextId: 2,
+    // Past the ids the starting herd took, so nothing new is given one of theirs.
+    nextId: n,
   };
 }
 
@@ -447,8 +448,8 @@ function gainXp(d: Draft, amount: number) {
 
 /** Picks one ripe plot, if it is ripe. Returns the units harvested. */
 function harvestPlot(d: Draft, field: FieldId, index: number): number {
-  const p = d.fields[field][index];
-  if (!p.crop || p.dead || p.growth < 1) return 0;
+  const p = d.fields[field]?.[index];
+  if (!p || !p.crop || p.dead || p.growth < 1) return 0;
   const crop = CROPS[p.crop];
   const amount = Math.round(crop.yield * (p.fertilized ? 1.5 : 1));
   addItem(d, crop.harvest, amount);
@@ -526,7 +527,10 @@ function runMachines(d: Draft, dt: number) {
       if (running(d, 'planter') && (!now.crop || now.dead)) {
         // A dead plant is cleared and sown again. A plot never sown gets what
         // the field is for, of whatever seed is in store.
-        const want = (now.dead ? now.crop : now.lastCrop) ?? def.suggested.find((c) => (d.inventory[CROPS[c].seed] ?? 0) > 0) ?? null;
+        const inStock = (c: CropId) => (d.inventory[CROPS[c].seed] ?? 0) > 0;
+        const first = (now.dead ? now.crop : now.lastCrop) ?? null;
+        // What it grew before, if there is seed for it; else what the field is for.
+        const want = first && inStock(first) ? first : (def.suggested.find(inStock) ?? first);
         if (want) {
           const crop = CROPS[want];
           if (takeItem(d, crop.seed, 1)) {
@@ -566,7 +570,7 @@ function runMachines(d: Draft, dt: number) {
 
 /** kWh an hour the farm makes now: panels and solar land by the sun, turbines by the wind. */
 export function powerMade(s: GameState, minutes = s.minutes): number {
-  const hour = hourOf(minutes) + (minutes % 60) / 60;
+  const hour = hourOf(minutes);
   const kind = weatherFor(dayOf(minutes)).kind;
   // The sun rises at 6 and sets at 20, strongest at 13.
   const sun = hour > 6 && hour < 20 ? Math.sin(((hour - 6) / 14) * Math.PI) * SUN[kind] : 0;
@@ -599,9 +603,13 @@ function settlePower(d: Draft, day: number) {
   d.power.made = 0;
   const log = ensureDay(d, day);
   if (net < 0) {
-    d.coins += -net;
-    log.income += -net;
-    note(d, `Fazla elektrik şebekeye satıldı: +${-net} altın.`, 'good');
+    // A surplus goes first to any bill still owed.
+    const owed = Math.min(d.power.unpaid, -net);
+    d.power.unpaid -= owed;
+    const paid = -net - owed;
+    d.coins += paid;
+    log.income += paid;
+    note(d, owed ? `Fazla elektrik satıldı: ${owed} altını eski faturaya gitti, +${paid} altın kasada.` : `Fazla elektrik şebekeye satıldı: +${paid} altın.`, 'good');
   } else if (net > 0) {
     const bill = net + d.power.unpaid;
     if (d.coins >= bill) {
@@ -748,7 +756,7 @@ function simulate(d: Draft, hours: number) {
     d.incubator = d.incubator.filter((tray) => {
       if (d.minutes < tray.readyAt) return true;
       const room = coopCapacity(d) - inCoop(d);
-      const chicks = Math.min(tray.eggs, room);
+      const chicks = Math.max(0, Math.min(tray.eggs, room));
       for (let i = 0; i < chicks; i++) d.animals.push(makeYoung('chicken', d.nextId++, day, SPECIES.chicken.breeds[0], d.animals));
       if (chicks) {
         ensureDay(d, day).births += chicks;
@@ -806,6 +814,7 @@ export const useGame = create<Store>()(
 
       tick: (nowMs) => {
         const s = get();
+        if (nowMs < s.lastReal) return set({ lastReal: nowMs });
         const elapsedMin = ((nowMs - s.lastReal) / 1000) * GAME_MINUTES_PER_SECOND;
         if (elapsedMin < 1) return;
         const hours = Math.min(elapsedMin / 60, MAX_CATCH_UP_HOURS);
@@ -817,8 +826,8 @@ export const useGame = create<Store>()(
 
       plant: (field, index, crop) =>
         update(set, (d) => {
-          const p = d.fields[field][index];
-          if (p.crop) return;
+          const p = d.fields[field]?.[index];
+          if (!p || p.crop) return;
           if (!takeItem(d, CROPS[crop].seed, 1)) return note(d, `${CROPS[crop].name} tohumun kalmadı.`, 'bad');
           d.fields[field][index] = { ...emptyPlot(), crop, moisture: p.moisture };
           gainXp(d, 1);
@@ -826,8 +835,8 @@ export const useGame = create<Store>()(
 
       water: (field, index) =>
         update(set, (d) => {
-          const p = d.fields[field][index];
-          if (!p.crop || p.dead) return;
+          const p = d.fields[field]?.[index];
+          if (!p || !p.crop || p.dead) return;
           if (d.tank < WATER_PER_PLOT) return note(d, 'Su deposu boş. Pompayı çalıştır.', 'bad');
           d.tank -= WATER_PER_PLOT;
           p.moisture = 100;
@@ -851,16 +860,16 @@ export const useGame = create<Store>()(
 
       fertilize: (field, index) =>
         update(set, (d) => {
-          const p = d.fields[field][index];
-          if (!p.crop || p.dead || p.fertilized) return;
+          const p = d.fields[field]?.[index];
+          if (!p || !p.crop || p.dead || p.fertilized || p.growth >= 1) return;
           if (!takeItem(d, 'fertilizer', 1)) return note(d, 'Gübren kalmadı.', 'bad');
           p.fertilized = true;
         }),
 
       weed: (field, index) =>
         update(set, (d) => {
-          const p = d.fields[field][index];
-          if (!p.weeds) return;
+          const p = d.fields[field]?.[index];
+          if (!p || !p.weeds) return;
           p.weeds = false;
           gainXp(d, 1);
         }),
@@ -879,7 +888,9 @@ export const useGame = create<Store>()(
 
       clearPlot: (field, index) =>
         update(set, (d) => {
-          d.fields[field][index] = { ...emptyPlot(), moisture: d.fields[field][index].moisture };
+          const p = d.fields[field]?.[index];
+          if (!p) return;
+          d.fields[field][index] = { ...emptyPlot(), moisture: p.moisture, lastCrop: p.crop ?? p.lastCrop };
         }),
 
       tidyField: (field) =>
@@ -978,7 +989,7 @@ export const useGame = create<Store>()(
         update(set, (d) => {
           const s = SPECIES[species];
           if (s.level > levelOf(d.xp)) return note(d, `${s.name} için seviye ${s.level} gerekli.`, 'bad');
-          if (species === 'chicken' ? inCoop(d) + eggsIn(d) >= coopCapacity(d) : inBarn(d) >= barnCapacity(d)) {
+          if (species === 'chicken' ? inCoop(d) + eggsIn(d) >= coopCapacity(d) : inBarn(d) + expectingIn(d) >= barnCapacity(d)) {
             return note(d, species === 'chicken' ? 'Kümeste yer kalmadı. Kümesi büyütebilirsin.' : 'Ahırda yer kalmadı. Ahırı büyütebilirsin.', 'bad');
           }
           if (d.coins < s.price) return note(d, 'Yeterli paran yok.', 'bad');
@@ -1078,8 +1089,8 @@ export const useGame = create<Store>()(
           if (growing && !destroy) return note(d, `${def.name} üzerinde ${growing} ekin var: hasat et ya da tarlayı boz.`, 'bad');
           if (from === 'barn') {
             const left = barnCapacity(d) - LAND_USES.barn.adds;
-            const herd = inBarn(d);
-            if (herd > left) return note(d, `Hayvanlar kalan ahıra sığmaz: önce ${herd - left} hayvan sat.`, 'bad');
+            const herd = inBarn(d) + expectingIn(d);
+            if (herd > left) return note(d, `Hayvanlar (doğacaklar dahil) kalan ahıra sığmaz: önce ${herd - left} hayvan sat.`, 'bad');
           }
           if (from === 'coop') {
             const left = coopCapacity(d) - LAND_USES.coop.adds;
@@ -1163,7 +1174,7 @@ export const useGame = create<Store>()(
           const f = FISH[species];
           if (f.level > levelOf(d.xp)) return note(d, `${f.name} için seviye ${f.level} gerekli.`, 'bad');
           const room = pondCapacity(d) - d.pond.batches.reduce((n, b) => n + b.count, 0);
-          const qty = Math.min(count, room);
+          const qty = Math.min(Math.floor(count), room);
           if (qty <= 0) return note(d, 'Havuz dolu.', 'bad');
           const cost = qty * f.price;
           if (d.coins < cost) return note(d, 'Yeterli paran yok.', 'bad');
@@ -1177,7 +1188,7 @@ export const useGame = create<Store>()(
         update(set, (d) => {
           const b = d.pond.batches.find((x) => x.id === batchId);
           if (!b || b.growth < 1) return;
-          const n = Math.max(0, Math.min(b.count, count ?? b.count));
+          const n = Math.max(0, Math.min(b.count, Math.floor(count ?? b.count)));
           if (!n) return;
           const f = FISH[b.species];
           addItem(d, f.catch, n);
@@ -1209,6 +1220,8 @@ export const useGame = create<Store>()(
 
       buy: (item, qty) =>
         update(set, (d) => {
+          if (!Number.isInteger(qty) || qty <= 0) return;
+          if (ITEMS[item].kind !== 'seed' && ITEMS[item].kind !== 'supply') return;
           const crop = Object.values(CROPS).find((c) => c.seed === item);
           if (crop && crop.level > levelOf(d.xp)) return note(d, `${crop.name} için seviye ${crop.level} gerekli.`, 'bad');
           const cost = buyPrice(item) * qty;
@@ -1221,7 +1234,7 @@ export const useGame = create<Store>()(
       sell: (item, qty) =>
         update(set, (d) => {
           const have = d.inventory[item] ?? 0;
-          const n = Math.min(have, qty);
+          const n = Math.min(have, Math.floor(qty));
           if (n <= 0) return;
           const earned = sellPrice(dayOf(d.minutes), item) * n;
           d.inventory[item] = have - n;
@@ -1266,7 +1279,7 @@ export const useGame = create<Store>()(
     }),
     {
       name: 'ciftlik-save',
-      version: 8,
+      version: 9,
       migrate: (persisted, version) => migrate(persisted, version),
       storage: createJSONStorage(() => AsyncStorage),
       // Only data is saved; the actions are rebuilt on load.
@@ -1344,6 +1357,8 @@ export const barnCapacity = (s: GameState) => capacity(s, 'barn') + landCount(s,
 export const coopCapacity = (s: GameState) => capacity(s, 'coop') + landCount(s, 'coop') * LAND_USES.coop.adds;
 /** Cows, sheep and goats live in the barn; hens in the coop. */
 export const inBarn = (s: GameState) => s.animals.filter((a) => a.species !== 'chicken').length;
+/** Young on the way take a place in the barn already. */
+const expectingIn = (s: GameState) => s.animals.filter((a) => a.pregnantSince !== null).length;
 export const inCoop = (s: GameState) => s.animals.filter((a) => a.species === 'chicken').length;
 const eggsIn = (s: GameState) => s.incubator.reduce((n, t) => n + t.eggs, 0);
 export const pondCapacity = (s: GameState) => capacity(s, 'pond') + landCount(s, 'pond') * LAND_USES.pond.adds;
@@ -1384,7 +1399,30 @@ export function migrate(persisted: unknown, version: number): GameState {
   s.power ??= { panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] };
   // Version 8 keeps the hens apart, in a coop of their own, built at its first size.
   s.upgrades = { ...s.upgrades, coop: s.upgrades.coop ?? 0 };
-  s.version = 8;
+  // Version 9: the counter for new ids started inside the starting herd's
+  // range, so some animals share an id. Give each repeat a fresh one, and
+  // move the counter past every id in use.
+  if (version < 9) {
+    const used = (id: string) => Number(id.match(/(\d+)$/)?.[1] ?? 0);
+    const all = [...s.animals.map((a) => a.id), ...s.pond.batches.map((b) => b.id), ...s.incubator.map((t) => t.id)];
+    s.nextId = Math.max(s.nextId, ...all.map(used)) + 1;
+    const seen = new Set<string>();
+    s.animals = s.animals.map((a) => {
+      if (!seen.has(a.id)) {
+        seen.add(a.id);
+        return a;
+      }
+      const id = `${a.species}-${s.nextId++}`;
+      seen.add(id);
+      return { ...a, id };
+    });
+  }
+  if (version < 9) {
+    // Hens that used to share the barn get a coop big enough for them.
+    const hens = s.animals.filter((a) => a.species === 'chicken').length + s.incubator.reduce((n, t) => n + t.eggs, 0);
+    while (s.upgrades.coop < FACILITIES.coop.steps.length && capacity(s, 'coop') < hens) s.upgrades.coop++;
+  }
+  s.version = 9;
   return s;
 }
 

@@ -20,7 +20,10 @@ export function EventToast() {
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    if (!latest || latest.id <= seen.current) return;
+    if (!latest) return;
+    // A fresh farm (Çiftliği sıfırla) starts its ids over: take that as new too.
+    if (latest.id <= seen.current && latest.id > 2) return;
+    if (latest.id === seen.current) return;
     seen.current = latest.id;
     setShown(latest);
     Animated.sequence([

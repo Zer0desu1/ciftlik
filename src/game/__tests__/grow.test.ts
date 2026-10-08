@@ -283,7 +283,7 @@ describe('what the land is for', () => {
     useGame.setState({ animals: Array.from({ length: barnCapacity(S()) }, () => animal('cow')) });
     S().convertLand('east', 'field');
     expect(S().land.east).toBe('barn');
-    expect(S().events[0].text).toBe(`Hayvanlar kalan ahıra sığmaz: önce ${LAND_USES.barn.adds} hayvan sat.`);
+    expect(S().events[0].text).toBe(`Hayvanlar (doğacaklar dahil) kalan ahıra sığmaz: önce ${LAND_USES.barn.adds} hayvan sat.`);
     S().buyLand('orchard', 'pond');
     useGame.setState({ pond: { ...S().pond, batches: [fish(pondCapacity(S()))] } });
     S().convertLand('orchard', 'tank');
@@ -325,7 +325,7 @@ describe('the farm', () => {
   it('a version-2 save loads as it was built', () => {
     const v2 = { ...initialState(T0), version: 2, upgrades: undefined };
     const s = migrate(v2, 2);
-    expect(s.version).toBe(8);
+    expect(s.version).toBe(9);
     expect(s.upgrades).toEqual({ barn: 0, coop: 0, pond: 0, tank: 0 });
     expect(barnCapacity(s)).toBe(FACILITIES.barn.base);
   });

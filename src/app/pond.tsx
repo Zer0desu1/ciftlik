@@ -49,28 +49,28 @@ function BatchRow({ batch }: { batch: FishBatch }) {
   const f = FISH[batch.species];
   const ready = batch.growth >= 1;
   return (
-    <Card style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, padding: S.md }}>
-      <View style={styles.fishThumb}>
-        <FishArt species={batch.species} size={52} />
-      </View>
-      <View style={{ flex: 1, gap: 6 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Txt v="label">
-            {batch.count} {f.name.toLowerCase()}
-          </Txt>
-          <Pill text={ready ? 'Tutulmaya hazır' : `%${Math.round(batch.growth * 100)} büyüdü`} tone={ready ? 'green' : 'blue'} />
-        </Row>
-        <Bar value={batch.growth * 100} color={C.blue} track={C.blueSoft} />
-      </View>
-      {ready ? (
-        <View style={{ gap: 6 }}>
-          <Txt v="caption" style={{ textAlign: 'center' }}>Tut</Txt>
-          <Row gap={4}>
-            <Button small kind="soft" label="1" onPress={() => useGame.getState().catchFish(batch.id, 1)} />
-            {batch.count > 5 ? <Button small kind="soft" label="5" onPress={() => useGame.getState().catchFish(batch.id, 5)} /> : null}
-            <Button small label="Hepsi" onPress={() => useGame.getState().catchFish(batch.id)} />
-          </Row>
+    <Card style={{ gap: S.sm, padding: S.md }}>
+      <Row gap={S.md}>
+        <View style={styles.fishThumb}>
+          <FishArt species={batch.species} size={52} />
         </View>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt v="label" numberOfLines={1} style={{ flexShrink: 1 }}>
+              {batch.count} {f.name.toLowerCase()}
+            </Txt>
+            <Pill text={ready ? 'Tutulmaya hazır' : `%${Math.round(batch.growth * 100)} büyüdü`} tone={ready ? 'green' : 'blue'} />
+          </Row>
+          <Bar value={batch.growth * 100} color={C.blue} track={C.blueSoft} />
+        </View>
+      </Row>
+      {ready ? (
+        <Row gap={S.sm}>
+          <Txt v="caption">Tut:</Txt>
+          <Button small kind="soft" label="1" onPress={() => useGame.getState().catchFish(batch.id, 1)} style={{ flex: 1 }} />
+          {batch.count > 5 ? <Button small kind="soft" label="5" onPress={() => useGame.getState().catchFish(batch.id, 5)} style={{ flex: 1 }} /> : null}
+          <Button small label={`Hepsi (${batch.count})`} onPress={() => useGame.getState().catchFish(batch.id)} style={{ flex: 2 }} />
+        </Row>
       ) : null}
     </Card>
   );

@@ -190,7 +190,7 @@ export default function PowerScreen() {
             {state.power.history.map((h) => (
               <Row key={h.day} style={{ justifyContent: 'space-between' }}>
                 <Txt v="body" style={{ fontFamily: F.semibold }}>{h.day}. gün</Txt>
-                <Txt v="caption">
+                <Txt v="caption" numberOfLines={1} style={{ flex: 1, marginHorizontal: S.sm }}>
                   {h.made} kWh üretim · {h.used} kWh tüketim
                 </Txt>
                 <Txt v="label" style={{ color: h.net > 0 ? C.rose : C.green }}>

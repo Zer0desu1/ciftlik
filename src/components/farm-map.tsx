@@ -448,10 +448,16 @@ class MapCamera {
       onMoveShouldSetPanResponderCapture: (_e, g) => g.numberActiveTouches > 1 || Math.abs(g.dx) + Math.abs(g.dy) > 6,
       onPanResponderGrant: (e, g) => {
         this.panning = true;
+        this.settle();
         start = this.cam;
         pinch = g.numberActiveTouches > 1 && e.nativeEvent.touches.length > 1 ? { d: touchDistance(e), mid: touchMiddle(e) } : null;
       },
       onPanResponderMove: (e, g) => {
+        if (pinch && g.numberActiveTouches < 2) {
+          pinch = null;
+          start = { ...this.cam, x: this.cam.x - g.dx, y: this.cam.y - g.dy };
+          return;
+        }
         if (g.numberActiveTouches > 1 && e.nativeEvent.touches.length > 1) {
           if (!pinch) {
             start = this.cam;
@@ -497,13 +503,29 @@ class MapCamera {
     if (this.carrying && this.carryMoved) {
       const from = this.carrying;
       const to = this.hovered;
-      this.carrying = null;
-      this.hovered = null;
-      this.listener?.hover(null);
+      this.cancelCarry();
       this.listener?.drop(from, to);
-      // Back to its place: if it moved, the land itself is redrawn there.
-      Animated.spring(this.ghost, { toValue: { x: 0, y: 0 }, useNativeDriver: false, speed: 30, bounciness: 0 }).start();
+    } else {
+      this.cancelCarry();
     }
+  }
+
+  /** Lets go of carried land without dropping it anywhere. */
+  cancelCarry() {
+    const was = this.carrying || this.hovered;
+    this.carrying = null;
+    this.carryMoved = false;
+    this.hovered = null;
+    if (was) this.listener?.hover(null);
+    // Back to its place: if it moved, the land itself is redrawn there.
+    Animated.spring(this.ghost, { toValue: { x: 0, y: 0 }, useNativeDriver: false, speed: 30, bounciness: 0 }).start();
+  }
+
+  /** Stops any glide where it is, so the camera and the picture agree. */
+  settle() {
+    const now = { ...this.cam };
+    (['s', 'x', 'y'] as const).forEach((key) => this.anim[key].stopAnimation((v) => (now[key] = v)));
+    this.cam = now;
   }
 
   /** Whether a press is a real tap, not the end of a drag. */
@@ -595,6 +617,14 @@ export function FarmMap({
 
   const [camera] = useState(() => new MapCamera());
   const [carried, setCarried] = useState<FieldId | null>(null);
+  const [shownMoving, setShownMoving] = useState(moving);
+  if (shownMoving !== moving) {
+    setShownMoving(moving);
+    if (!moving && carried) setCarried(null);
+  }
+  useEffect(() => {
+    if (!moving) camera.cancelCarry();
+  }, [camera, moving]);
   const [dropOn, setDropOn] = useState<FieldId | null>(null);
   useEffect(() => {
     camera.listen({
@@ -714,7 +744,12 @@ export function FarmMap({
             <Pressable
               key={zone}
               accessibilityRole="button"
-              accessibilityLabel={z.label}
+              accessibilityLabel={(() => {
+                const f = FIELDS.find((x) => x.id === zone);
+                const use = f ? state.land[f.id] : undefined;
+                return f && use ? landName(f, use) : f?.land ? `${z.label} · satılık ${f.land.price} altın` : z.label;
+              })()}
+              testID={`zone-${zone}`}
               onPress={() => camera.isTap() && onSelect(zone)}
               onLongPress={() => {
                 if (!camera.isTap()) return;

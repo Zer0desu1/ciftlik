@@ -47,7 +47,8 @@ function Swimmer({
   pellets: Pellet[];
   onEat: (id: number) => void;
 }) {
-  const size = FISH_W * (0.6 + 0.4 * Math.min(1, grown));
+  // In quarter steps: growth creeps up every tick, and each new size restarts the swim.
+  const size = FISH_W * (0.6 + 0.4 * Math.round(Math.min(1, grown) * 4) / 4);
   const [x] = useState(() => new Animated.Value(Math.random() * Math.max(1, area.w - size)));
   const [y] = useState(() => new Animated.Value(Math.random() * Math.max(1, area.h - size)));
   const [facing] = useState(() => new Animated.Value(1));
@@ -63,6 +64,7 @@ function Swimmer({
     const sx = x.addListener(({ value }) => (pos.current.x = value));
     const sy = y.addListener(({ value }) => (pos.current.y = value));
     let alive = true;
+    busy.current = false;
 
     const swimTo = (target: Point, speed: number, done: () => void) => {
       const dx = target.x - pos.current.x;
@@ -106,6 +108,7 @@ function Swimmer({
     next();
     return () => {
       alive = false;
+      busy.current = false;
       x.removeListener(sx);
       y.removeListener(sy);
       x.stopAnimation();
@@ -137,9 +140,12 @@ export function PondView({ batches, quality, feedKey }: { batches: FishBatch[]; 
   const [pellets, setPellets] = useState<Pellet[]>([]);
   const nextId = useRef(1);
   const swimmers = swimmersFor(batches);
+  // The feeding count when the pond came on screen: food thrown in before is long eaten.
+  const fedAt = useRef(feedKey);
 
   useEffect(() => {
-    if (!feedKey || !area) return;
+    if (!area || feedKey === fedAt.current) return;
+    fedAt.current = feedKey;
     const fresh: Pellet[] = Array.from({ length: PELLETS }, () => {
       const p: Pellet = {
         id: nextId.current++,
@@ -164,7 +170,10 @@ export function PondView({ batches, quality, feedKey }: { batches: FishBatch[]; 
 
   return (
     <View
-      onLayout={(e: LayoutChangeEvent) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      onLayout={(e: LayoutChangeEvent) => {
+        const { width: w, height: h } = e.nativeEvent.layout;
+        setArea((old) => (old && old.w === w && old.h === h ? old : { w, h }));
+      }}
       style={[styles.pond, { opacity: 0.55 + (quality / 100) * 0.45 }]}>
       <View style={[styles.murk, { opacity: (100 - quality) / 160 }]} />
       {area

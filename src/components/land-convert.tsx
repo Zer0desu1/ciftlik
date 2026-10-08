@@ -40,7 +40,9 @@ export function ConvertCard({ field, onMove, title }: { field: FieldId; onMove?:
       <Txt v="caption">
         {use === 'field'
           ? 'Tarlayı bozup başka bir şey yapabilirsin. Üzerindeki ekinler sökülür.'
-          : 'Hayvanlar ya da balıklar varsa önce kalan yere sığmaları gerekir.'}
+          : use === 'empty'
+            ? 'Tarla, ahır, kümes, balık havuzu, su deposu ya da güneş tarlası yapabilirsin.'
+            : 'Hayvanlar ya da balıklar varsa önce kalan yere sığmaları gerekir.'}
       </Txt>
       {asking ? (
         <View style={{ gap: S.sm }}>

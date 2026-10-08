@@ -35,6 +35,11 @@ export default function WaterScreen() {
       </Card>
 
       <SectionHeader title="Tarlalar" subtitle="Susuz kalan parselleri tek dokunuşla sula" />
+      {FIELDS.every((f) => !fields[f.id].length) ? (
+        <Card>
+          <Txt v="body">Hiç tarlan yok. Haritada bir araziye dokunup tarla yapabilirsin.</Txt>
+        </Card>
+      ) : null}
       {FIELDS.filter((f) => fields[f.id].length).map((f) => {
         const s = summarizeField(fields[f.id]);
         return (

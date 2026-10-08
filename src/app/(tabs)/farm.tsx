@@ -48,8 +48,8 @@ function LandCard({ field, state }: { field: FieldId; state: GameState }) {
         </View>
       </Row>
       <Txt v="body">
-        Boş arazi olarak al, sonra ne olacağına sen karar ver: {BASE_PLOTS} parsellik tarla, ahır ve mera, balık havuzu, su deposu ya da
-        güneş tarlası. İstersen hazır kurulu da alabilirsin.
+        Boş arazi olarak al, sonra ne olacağına sen karar ver: {BASE_PLOTS} parsellik tarla, ahır ve mera, kümes, balık havuzu, su deposu
+        ya da güneş tarlası. İstersen hazır kurulu da alabilirsin.
       </Txt>
       {locked ? (
         <Button label={`Seviye ${land.level} gerekli`} icon={<Lock size={16} color={C.white} />} onPress={() => {}} disabled />
@@ -107,7 +107,7 @@ function UseCard({ field, state }: { field: FieldId; state: GameState }) {
     coop: { label: 'Tavuklara git', href: '/livestock', now: `Kümeste ${inCoop(state)} / ${coopCapacity(state)} tavuk` },
     pond: { label: 'Havuza git', href: '/pond', now: `Havuzda ${state.pond.batches.reduce((n, b) => n + b.count, 0)} / ${pondCapacity(state)} balık` },
     tank: { label: 'Suya git', href: '/water', now: `Depoda ${Math.round(state.tank)} / ${tankCapacity(state)} L su` },
-    solar: { label: 'Elektriğe git', href: '/power', now: `Çiftlik şu an ${powerMade(state).toFixed(1)} kWh/sa üretiyor` },
+    solar: { label: 'Elektriğe git', href: '/power', now: `Bütün çiftlik şu an ${powerMade(state).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} kWh/sa üretiyor` },
   };
   const g = go[use as Exclude<LandUse, 'field' | 'empty'>];
   return (
@@ -129,7 +129,7 @@ function ZoneCard({ zone, state, onMove }: { zone: ZoneId; state: GameState; onM
     if (!ownsLand(state, zone)) return <LandCard field={zone} state={state} />;
     return (
       <>
-        <ConvertCard field={zone} onMove={() => onMove(zone)} />
+        <ConvertCard key={zone} field={zone} onMove={() => onMove(zone)} />
         {state.land[zone] === 'field' ? <PlaceCard zone={zone} state={state} /> : <UseCard field={zone} state={state} />}
       </>
     );
@@ -266,10 +266,9 @@ export default function FarmScreen() {
   const [moving, setMoving] = useState<FieldId | null>(null);
   const order: (ZoneId | null)[] = [null, 'house', ...ownedLand(state).map((f) => f.id), 'animals', 'water', 'storage'];
   const forSale = FIELDS.filter((f) => f.land && !ownsLand(state, f.id)).length;
-  const firstField = ownedFields(state)[0]?.id ?? 'tomatoes';
+  const firstField = ownedFields(state)[0]?.id;
   const pickUp = (f: FieldId) => {
     setMoving(f);
-    setZone(null);
   };
   const tap = (z: ZoneId) => {
     if (moving) {
@@ -345,7 +344,7 @@ export default function FarmScreen() {
 
           <SectionHeader title="Keşfet" />
           <Row gap={S.md}>
-            <ExploreTile title="Tarlalarım" sub={`${plantedCount(state)} ekili parsel`} tint={C.greenSoft} icon={<Wheat size={18} color={C.green} />} href={`/field/${firstField}`} />
+            <ExploreTile title="Tarlalarım" sub={`${plantedCount(state)} ekili parsel`} tint={C.greenSoft} icon={<Wheat size={18} color={C.green} />} href={firstField ? `/field/${firstField}` : '/upgrades'} />
             <ExploreTile title="Hayvanlar" sub={`${state.animals.length} hayvan`} tint={C.roseSoft} icon={<PawPrint size={18} color={C.rose} />} href="/livestock" />
           </Row>
           <Row gap={S.md}>
@@ -373,7 +372,9 @@ export default function FarmScreen() {
                   ? `${state.power.unpaid} altın fatura ödenmedi · makineler durdu`
                   : powerBalance(state) > 0
                     ? `Bugünkü fatura şimdilik ${powerBalance(state)} altın · panel kur, kendin üret`
-                    : `Bugün ${-powerBalance(state)} altınlık elektrik satıyorsun`}
+                    : powerBalance(state) < 0
+                      ? `Bugün ${-powerBalance(state)} altınlık elektrik satıyorsun`
+                      : 'Bugün henüz fatura yok'}
               </Txt>
             </View>
             <ArrowRight size={18} color={state.power.unpaid ? C.rose : C.amber} />

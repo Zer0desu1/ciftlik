@@ -122,7 +122,17 @@ function MyLand() {
   );
 }
 
+/** What land given over to a building adds to it. */
+function useLandFor() {
+  const land = useGame((s) => s.land);
+  return (id: FacilityId) => {
+    const use = id === 'barn' ? 'barn' : id === 'coop' ? 'coop' : id === 'pond' ? 'pond' : 'tank';
+    return FIELDS.filter((f) => land[f.id] === use).length * LAND_USES[use].adds;
+  };
+}
+
 export default function UpgradesScreen() {
+  const landFor = useLandFor();
   const state = useGame();
   const { expandField, upgrade, buyLand } = useGame.getState();
 
@@ -196,7 +206,7 @@ export default function UpgradesScreen() {
             icon={FACILITY_LOOK[id].icon}
             tint={FACILITY_LOOK[id].tint}
             title={f.name}
-            now={`${capacity(state, id).toLocaleString('tr-TR')} ${f.unit} kapasite`}
+            now={`${capacity(state, id).toLocaleString('tr-TR')} ${f.unit} kapasite${landFor(id) ? ` · araziyle toplam ${(capacity(state, id) + landFor(id)).toLocaleString('tr-TR')}` : ''}`}
             next={step ? `${step.capacity.toLocaleString('tr-TR')} ${f.unit} kapasite` : null}
             done={lvl}
             total={f.steps.length}

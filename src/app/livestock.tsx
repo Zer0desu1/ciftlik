@@ -33,6 +33,8 @@ function Incubator() {
   const eggs = useGame((s) => s.inventory.egg ?? 0);
   const trays = useGame((s) => s.incubator);
   const minutes = useGame((s) => s.minutes);
+  const room = useGame((s) => coopCapacity(s) - inCoop(s) - s.incubator.reduce((n, t) => n + t.eggs, 0));
+  const batch = Math.max(0, Math.min(eggs, INCUBATOR_SIZE, room));
   return (
     <Card style={{ gap: S.md }}>
       <Row gap={S.md}>
@@ -58,10 +60,10 @@ function Incubator() {
       })}
       <Button
         kind="soft"
-        label={`${Math.min(eggs, INCUBATOR_SIZE)} yumurtayı kuluçkaya koy`}
+        label={room <= 0 ? 'Kümeste civcivlere yer yok' : `${batch} yumurtayı kuluçkaya koy`}
         icon={<Egg size={15} color={C.green} />}
         onPress={() => useGame.getState().incubate(INCUBATOR_SIZE)}
-        disabled={!eggs || trays.length >= 3}
+        disabled={!batch || trays.length >= 3}
       />
     </Card>
   );
@@ -202,7 +204,11 @@ export default function LivestockScreen() {
             </Txt>
             <Txt v="display">{state.animals.length} hayvan</Txt>
           </View>
-          <Pill text={avg(state.animals.map((a) => a.health)) > 70 ? 'Sağlıklı' : 'İlgi istiyor'} tone={avg(state.animals.map((a) => a.health)) > 70 ? 'green' : 'rose'} />
+          {state.animals.length ? (
+            <Pill text={avg(state.animals.map((a) => a.health)) > 70 ? 'Sağlıklı' : 'İlgi istiyor'} tone={avg(state.animals.map((a) => a.health)) > 70 ? 'green' : 'rose'} />
+          ) : (
+            <Pill text="Hayvan yok" tone="muted" />
+          )}
         </Row>
         <Row style={{ justifyContent: 'space-around' }}>
           {[
@@ -227,7 +233,7 @@ export default function LivestockScreen() {
         <Row style={{ justifyContent: 'space-between' }}>
           <Txt v="label">Bakım</Txt>
           <Txt v="caption">
-            {ill.length ? `${ill.length} hasta` : 'Herkes sağlıklı'} · {state.inventory.medicine ?? 0} ilaç
+            {ill.length ? `${ill.length} tedavi bekliyor` : 'Herkes sağlıklı'} · {state.inventory.medicine ?? 0} ilaç
           </Txt>
         </Row>
         <Row gap={S.sm}>
@@ -269,7 +275,14 @@ export default function LivestockScreen() {
         {(Object.keys(SPECIES) as SpeciesId[]).map((id) => {
           const active = id === species;
           return (
-            <Pressable key={id} onPress={() => setSpecies(id)} style={[styles.cat, active && styles.catActive]}>
+            <Pressable
+              key={id}
+              onPress={() => {
+                setSpecies(id);
+                setPicked([]);
+                setSelecting(false);
+              }}
+              style={[styles.cat, active && styles.catActive]}>
               <AnimalArt species={id} size={58} />
               <Txt v="number" style={{ fontSize: 20, color: active ? C.green : C.ink }}>{herdOf(state, id).length}</Txt>
               <Txt v="caption" style={{ color: active ? C.ink : C.muted, fontFamily: F.semibold }}>{SPECIES[id].plural}</Txt>
@@ -319,7 +332,7 @@ export default function LivestockScreen() {
                 setSelecting(!selecting);
                 setPicked([]);
               }}
-              disabled={!herd.length}
+              disabled={!selecting && !herd.length}
             />
           </Row>
         }

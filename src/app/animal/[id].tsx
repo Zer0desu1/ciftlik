@@ -117,10 +117,10 @@ export default function AnimalScreen() {
           label={`İlaç ver (${medicine})`}
           icon={<PillIcon size={16} color={C.green} />}
           onPress={() => heal(animal.id)}
-          disabled={animal.health >= 95}
+          disabled={animal.health >= 95 || !medicine}
           style={{ flex: 1 }}
         />
-        <Button label="Ürünü topla" icon={<PackageOpen size={16} color={C.white} />} onPress={() => collect(animal.species)} disabled={animal.product < 1} style={{ flex: 1 }} />
+        <Button label="Sürünün ürününü topla" icon={<PackageOpen size={16} color={C.white} />} onPress={() => collect(animal.species)} disabled={animal.product < 1} style={{ flex: 1 }} />
       </Row>
 
       <Card style={{ gap: S.sm, borderRadius: R.lg }}>

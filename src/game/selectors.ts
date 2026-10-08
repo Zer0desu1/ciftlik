@@ -63,7 +63,9 @@ const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.le
  * toward the living things.
  */
 export function farmHealth(state: GameState): number {
-  const soil = Math.min(100, averageMoisture(state) * 1.4);
+  // Nothing growing is nothing thirsty: bare soil does not count against the farm.
+  const growing = FIELDS.some((f) => state.fields[f.id].some((p) => p.crop && !p.dead));
+  const soil = growing ? Math.min(100, averageMoisture(state) * 1.4) : 100;
   const herd = avg(state.animals.map((a) => (a.health * 2 + a.fullness) / 3));
   const pond = state.pond.batches.length ? state.pond.quality : 100;
   return Math.round(soil * 0.25 + herd * 0.4 + state.barnClean * 0.15 + pond * 0.2);

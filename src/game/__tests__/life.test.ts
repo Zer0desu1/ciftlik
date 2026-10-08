@@ -275,9 +275,27 @@ describe('old saves', () => {
       incubator: undefined,
     };
     const s = migrate(v1, 1);
-    expect(s.version).toBe(8);
+    expect(s.version).toBe(9);
     expect(s.incubator).toEqual([]);
     expect(s.animals.every((a) => a.pregnantSince === null && a.sickHours === 0 && a.warnedSick === false)).toBe(true);
     expect(s.log[0]).toMatchObject({ births: 0, deaths: 0 });
+  });
+});
+
+describe('ids', () => {
+  it('a new animal never takes an id the starting herd has', () => {
+    useGame.setState({ ...initialState(), coins: 100_000, xp: 100_000 });
+    for (let i = 0; i < 6; i++) S().buyAnimal('chicken');
+    const ids = S().animals.map((a) => a.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('a save whose animals share ids gets them apart, and its counter moved on', () => {
+    const old = initialState();
+    const twin = { ...old.animals[0] };
+    const s = migrate({ ...old, version: 8, nextId: 2, animals: [...old.animals, twin] } as unknown as GameState, 8);
+    const ids = s.animals.map((a) => a.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(s.nextId).toBeGreaterThan(Math.max(...ids.map((id) => Number(id.split('-')[1]))));
   });
 });

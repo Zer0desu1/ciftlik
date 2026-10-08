@@ -128,7 +128,7 @@ describe('old saves', () => {
   it('a version-6 save gets electricity, nothing built', () => {
     const old = { ...initialState(T0), version: 6, power: undefined } as unknown as GameState;
     const s = migrate(old, 6);
-    expect(s.version).toBe(8);
+    expect(s.version).toBe(9);
     expect(s.power).toEqual({ panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] });
   });
 });

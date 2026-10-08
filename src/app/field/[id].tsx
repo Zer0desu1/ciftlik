@@ -146,6 +146,31 @@ export default function FieldScreen() {
   const [picking, setPicking] = useState<number | null>(null);
   const def = FIELDS.find((f) => f.id === field)!;
   const sum = summarizeField(plots);
+  const thirsty = plots.some((p) => p.crop && !p.dead && p.moisture <= 85);
+
+  // The land asked for is not a field (any more): say so rather than show another.
+  if (!owned || (id && !owned.split(',').includes(id))) {
+    return (
+      <Screen bottomGap={40} header={<TopBar title="Tarla" subtitle="Bu arazi tarla değil" />}>
+        <Card style={{ gap: S.md }}>
+          <Txt v="heading">{owned ? 'Bu arazi artık tarla değil' : 'Hiç tarlan yok'}</Txt>
+          <Txt v="body">
+            {owned
+              ? 'Başka bir şeye çevrilmiş. Tarlalarından birini seç ya da haritadan araziyi yeniden tarla yap.'
+              : 'Bütün arazilerin başka işlerde. Haritada bir araziye dokunup tarla yapabilirsin.'}
+          </Txt>
+          {owned ? (
+            <Row gap={S.sm} style={{ flexWrap: 'wrap' }}>
+              {FIELDS.filter((f) => owned.split(',').includes(f.id)).map((f) => (
+                <Chip key={f.id} label={f.name} onPress={() => router.setParams({ id: f.id })} />
+              ))}
+            </Row>
+          ) : null}
+          <Button label="Haritaya dön" onPress={() => router.navigate('/(tabs)/farm')} />
+        </Card>
+      </Screen>
+    );
+  }
 
   return (
     <Screen bottomGap={40} header={<TopBar title={def.name} subtitle={`${sum.planted} ekili · ${sum.ripe} hasada hazır`} />}>
@@ -168,7 +193,7 @@ export default function FieldScreen() {
         </Row>
         <Bar value={(tank / cap) * 100} color={C.blue} track={C.blueSoft} />
         <Row gap={S.sm}>
-          <Button label="Hepsini sula" kind="soft" icon={<Droplets size={16} color={C.green} />} onPress={() => waterField(field)} style={{ flex: 1 }} />
+          <Button label="Hepsini sula" kind="soft" icon={<Droplets size={16} color={C.green} />} onPress={() => waterField(field)} disabled={!thirsty} style={{ flex: 1 }} />
           <Button label={`Hasat (${sum.ripe})`} icon={<Wheat size={16} color={C.white} />} onPress={() => harvestField(field)} disabled={!sum.ripe} style={{ flex: 1 }} />
         </Row>
         {sum.dead + sum.weeds > 0 ? (
@@ -221,7 +246,7 @@ export default function FieldScreen() {
           }}
         />
       ) : null}
-      <ConvertCard field={field} title="Bu tarlayı dönüştür" />
+      <ConvertCard key={field} field={field} title="Bu tarlayı dönüştür" />
     </Screen>
   );
 }

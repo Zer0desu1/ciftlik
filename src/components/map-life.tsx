@@ -54,6 +54,7 @@ const SHOW: Record<SpeciesId, number> = { cow: 6, sheep: 4, goat: 4, chicken: 8 
 const SIZE: Record<SpeciesId, number> = { cow: 22, sheep: 18, goat: 18, chicken: 12 };
 
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
+const hashOf = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 /**
  * Something that ambles around: picks a spot in one of its areas, walks there,
@@ -78,7 +79,7 @@ function Wanderer({
   const { x: vx, y: vy, scale } = view;
   const s = size * scale;
   const [start] = useState(() => {
-    const a = areas[Math.floor(Math.random() * areas.length)];
+    const a = areas[Math.floor(Math.random() * areas.length)] ?? { x: 0, y: 0, w: size, h: size };
     return { x: (rand(a.x, a.x + a.w - size) - vx) * scale, y: (rand(a.y, a.y + a.h - size) - vy) * scale };
   });
   const [x] = useState(() => new Animated.Value(start.x));
@@ -88,12 +89,11 @@ function Wanderer({
 
   useEffect(() => {
     let alive = true;
+    // Where it stands: known at the end of each walk, so nothing listens per frame.
     const at = { ...start };
-    const sx = x.addListener(({ value }) => (at.x = value));
-    const sy = y.addListener(({ value }) => (at.y = value));
     let timer: ReturnType<typeof setTimeout>;
     const step = () => {
-      if (!alive) return;
+      if (!alive || !areas.length) return;
       const a = areas[Math.floor(Math.random() * areas.length)];
       const tx = (rand(a.x, a.x + a.w - size) - vx) * scale;
       const ty = (rand(a.y, a.y + a.h - size) - vy) * scale;
@@ -104,7 +104,10 @@ function Wanderer({
         Animated.timing(x, { toValue: tx, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         Animated.timing(y, { toValue: ty, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ]).start(({ finished }) => {
-        if (finished && alive) timer = setTimeout(step, rand(600, 2600));
+        if (!finished || !alive) return;
+        at.x = tx;
+        at.y = ty;
+        timer = setTimeout(step, rand(600, 2600));
       });
     };
     // A small hop while walking, so it reads as steps rather than sliding.
@@ -120,8 +123,6 @@ function Wanderer({
       alive = false;
       clearTimeout(timer);
       hop.stop();
-      x.removeListener(sx);
-      y.removeListener(sy);
       x.stopAnimation();
       y.stopAnimation();
     };
@@ -195,20 +196,20 @@ export function MapLife({ state, view, land }: { state: GameState; view: View_; 
     const shown = Math.min(all.length, SHOW[sp] * homes.length);
     // Keep the young in proportion: a herd half calves shows half calves.
     const youngShown = Math.min(young.length, Math.round((young.length / Math.max(all.length, 1)) * shown));
-    for (let i = 0; i < shown; i++) {
-      const isYoung = i < youngShown;
+    const adults = all.filter((a) => isAdult(a, day));
+    const onShow = [...young.slice(0, youngShown), ...adults.slice(0, shown - youngShown)];
+    onShow.forEach((a) => {
+      const isYoung = !isAdult(a, day);
       const size = SIZE[sp] * (isYoung ? 0.75 : 1);
+      // Keyed by the animal, and kept to one pen by its id, so growing up or
+      // the herd changing never sends a sprite jumping elsewhere.
+      const home = homes[hashOf(a.id) % homes.length];
       herd.push(
-        <Wanderer
-          key={`${sp}-${i}-${isYoung}`}
-          areas={homes[i % homes.length]}
-          view={view}
-          size={size}
-          speed={sp === 'chicken' ? 14 : 6}>
-          <AnimalArt species={sp} size={size * view.scale} variant={all[i]?.variant ?? 0} young={isYoung} />
+        <Wanderer key={a.id} areas={home} view={view} size={size} speed={sp === 'chicken' ? 14 : 6}>
+          <AnimalArt species={sp} size={size * view.scale} variant={a.variant} young={isYoung} />
         </Wanderer>,
       );
-    }
+    });
   });
 
   // Fish, up to six a pond, in proportion to what swims there, spread over the ponds.

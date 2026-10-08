@@ -72,15 +72,17 @@ export default function AnalyticsScreen() {
         <Row gap={S.md}>
           <Card style={{ flex: 1, gap: 4 }}>
             <Txt v="caption">Gelir</Txt>
-            <Txt v="number" style={{ color: C.green }}>{totals.income ? `+${totals.income}` : 0}</Txt>
+            <Txt v="number" numberOfLines={1} style={{ color: C.green, fontSize: 20 }}>{totals.income ? `+${totals.income.toLocaleString('tr-TR')}` : 0}</Txt>
           </Card>
           <Card style={{ flex: 1, gap: 4 }}>
             <Txt v="caption">Gider</Txt>
-            <Txt v="number" style={{ color: C.amber }}>{totals.expense ? `−${totals.expense}` : 0}</Txt>
+            <Txt v="number" numberOfLines={1} style={{ color: C.amber, fontSize: 20 }}>{totals.expense ? `−${totals.expense.toLocaleString('tr-TR')}` : 0}</Txt>
           </Card>
           <Card style={{ flex: 1, gap: 4 }}>
             <Txt v="caption">Net</Txt>
-            <Txt v="number" style={{ color: totals.income - totals.expense >= 0 ? C.ink : C.rose }}>{totals.income - totals.expense}</Txt>
+            <Txt v="number" numberOfLines={1} style={{ color: totals.income - totals.expense >= 0 ? C.ink : C.rose, fontSize: 20 }}>
+              {totals.income - totals.expense < 0 ? `−${(totals.expense - totals.income).toLocaleString('tr-TR')}` : (totals.income - totals.expense).toLocaleString('tr-TR')}
+            </Txt>
           </Card>
         </Row>
 
