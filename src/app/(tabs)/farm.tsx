@@ -126,7 +126,8 @@ function UseCard({ field, state }: { field: FieldId; state: GameState }) {
 
 function ZoneCard({ zone, state, onMove }: { zone: ZoneId; state: GameState; onMove: (f: FieldId) => void }) {
   if (isLand(zone)) {
-    if (!ownsLand(state, zone)) return <LandCard field={zone} state={state} />;
+    if (!ownsLand(state, zone) && defOf(zone).land) return <LandCard field={zone} state={state} />;
+    if (!ownsLand(state, zone)) return <ConvertCard key={zone} field={zone} />;
     return (
       <>
         <ConvertCard key={zone} field={zone} onMove={() => onMove(zone)} />

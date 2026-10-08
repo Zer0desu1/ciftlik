@@ -212,6 +212,7 @@ type Actions = {
   buyDog: () => void;
   rename: (name: string) => void;
   claim: (achievementId: string) => void;
+  warnOldTab: () => void;
   payBill: () => void;
   /** `destroy` digs up whatever grows on a field rather than refusing. */
   convertLand: (field: FieldId, to: LandUse, destroy?: boolean) => void;
@@ -1015,6 +1016,57 @@ function happen(d: Draft, day: number) {
   note(d, `Fiyat patlaması: ${ITEMS[h.item!].name} bugün iki katına satılıyor!`, 'good');
 }
 
+export const SAVE_KEY = 'ciftlik-save';
+export const SAVE_VERSION = 10;
+
+/**
+ * Storage that never lets an older copy of the game write over a save made
+ * by a newer one (an old browser tab left open, say): that older save would
+ * come back without whatever the newer version keeps.
+ */
+const guardedStorage = {
+  getItem: (name: string) => AsyncStorage.getItem(name),
+  removeItem: (name: string) => AsyncStorage.removeItem(name),
+  setItem: async (name: string, value: string) => {
+    try {
+      const was = JSON.parse((await AsyncStorage.getItem(name)) ?? 'null')?.version ?? 0;
+      const now = JSON.parse(value)?.version ?? 0;
+      if (was > now) return;
+    } catch {
+      // An unreadable save is no reason not to write a good one.
+    }
+    await AsyncStorage.setItem(name, value);
+  },
+};
+
+/**
+ * Mends a save so the game can always run on it: the three starting pieces
+ * of land are always the farm's, land in use as a field has plots and land
+ * that is not a field has none. Missing lists come back empty.
+ */
+export function repair(s: GameState): GameState {
+  const fields = { ...s.fields } as Record<FieldId, Plot[]>;
+  const land = { ...(s.land ?? {}) } as GameState['land'];
+  for (const f of FIELDS) {
+    fields[f.id] = Array.isArray(fields[f.id]) ? fields[f.id] : [];
+    if (!f.land && !land[f.id]) land[f.id] = fields[f.id].length ? 'field' : 'empty';
+    const use = land[f.id];
+    if (use === 'field' && !fields[f.id].length) fields[f.id] = Array.from({ length: f.plots }, emptyPlot);
+    if (use !== 'field' && fields[f.id].length) fields[f.id] = [];
+  }
+  return {
+    ...s,
+    fields,
+    land,
+    animals: Array.isArray(s.animals) ? s.animals : [],
+    orders: Array.isArray(s.orders) ? s.orders : [],
+    achievements: Array.isArray(s.achievements) ? s.achievements : [],
+    claimed: Array.isArray(s.claimed) ? s.claimed : [],
+    workshops: s.workshops ?? {},
+    incubator: Array.isArray(s.incubator) ? s.incubator : [],
+  };
+}
+
 export const useGame = create<Store>()(
   persist(
     (set, get) => ({
@@ -1335,6 +1387,9 @@ export const useGame = create<Store>()(
           note(d, `${a.name} ödülü: +${a.reward} altın.`, 'good');
         }),
 
+      warnOldTab: () =>
+        update(set, (d) => warnOnce(d, 'old-tab', 'Oyun başka bir sekmede eski bir sürümle açık. O sekmeyi kapat, yoksa kaydın bozulabilir.')),
+
       rename: (name) =>
         update(set, (d) => {
           const clean = name.trim().slice(0, 32);
@@ -1555,10 +1610,12 @@ export const useGame = create<Store>()(
       reset: () => set(() => ({ ...initialState(), farmName: get().farmName })),
     }),
     {
-      name: 'ciftlik-save',
-      version: 10,
+      name: SAVE_KEY,
+      version: SAVE_VERSION,
       migrate: (persisted, version) => migrate(persisted, version),
-      storage: createJSONStorage(() => AsyncStorage),
+      // Every load is checked and mended, whatever version it was saved by.
+      merge: (persisted, current) => ({ ...current, ...repair({ ...current, ...(persisted as Partial<GameState>) } as GameState) }),
+      storage: createJSONStorage(() => guardedStorage),
       // Only data is saved; the actions are rebuilt on load.
       partialize: (s) =>
         Object.fromEntries(Object.entries(s).filter(([, v]) => typeof v !== 'function')) as GameState,
@@ -1672,6 +1729,8 @@ export function migrate(persisted: unknown, version: number): GameState {
   for (const f of FIELDS) s.fields[f.id] ??= [];
   // Version 6 records what each piece of land is used for; until now, all were fields.
   if (version < 6) s.land = Object.fromEntries(FIELDS.filter((f) => s.fields[f.id].length).map((f) => [f.id, 'field']));
+  // The starting land is always the farm's, whatever an old save says.
+  for (const f of FIELDS) if (!f.land && !s.land[f.id]) s.land[f.id] = s.fields[f.id].length ? 'field' : 'empty';
   // Version 7 brings electricity: nothing built yet, the meter at zero.
   s.power ??= { panels: 0, turbines: 0, used: 0, made: 0, unpaid: 0, history: [] };
   // Version 8 keeps the hens apart, in a coop of their own, built at its first size.

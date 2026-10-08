@@ -10,11 +10,11 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { EventToast } from '@/components/event-toast';
-import { useGame } from '@/game/store';
+import { SAVE_KEY, SAVE_VERSION, useGame } from '@/game/store';
 import { C } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -29,10 +29,25 @@ function useGameClock(ready: boolean) {
     if (!ready) return;
     const tick = () => useGame.getState().tick(Date.now());
     tick();
+    // On the web the game may be open in more than one tab: take up what
+    // another tab saved, and warn when that tab runs an older version.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== SAVE_KEY || !e.newValue) return;
+      try {
+        const version = JSON.parse(e.newValue)?.version ?? 0;
+        if (version < SAVE_VERSION) useGame.getState().warnOldTab();
+        else void useGame.persist.rehydrate();
+      } catch {
+        // Not ours to read.
+      }
+    };
+    const web = Platform.OS === 'web' && typeof window !== 'undefined';
+    if (web) window.addEventListener('storage', onStorage);
     const timer = setInterval(tick, 1000);
     const sub = AppState.addEventListener('change', (s) => s === 'active' && tick());
     return () => {
       clearInterval(timer);
+      if (web) window.removeEventListener('storage', onStorage);
       sub.remove();
     };
   }, [ready]);

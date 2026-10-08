@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BARN_CAPACITY, COOP_CAPACITY, FACILITIES, POWER, SUN } from '../data';
-import { emptyPlot, initialState, migrate, powerMade, useGame, type Animal, type GameState, type Plot } from '../store';
+import { emptyPlot, initialState, migrate, powerMade, repair, SAVE_KEY, SAVE_VERSION, useGame, type Animal, type GameState, type Plot } from '../store';
 import { farmHealth } from '../selectors';
 
 /** Things a full check of the game turned up, each kept fixed. */
@@ -99,5 +99,38 @@ describe('fixes', () => {
     const s = migrate({ ...old, version: 8, animals: hens, upgrades: { ...old.upgrades, coop: 0 } } as unknown as GameState, 8);
     expect(s.upgrades.coop).toBe(1);
     expect(FACILITIES.coop.steps[0].capacity).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe('saves from elsewhere', () => {
+  it('an old save, from before land had uses, keeps the starting land even where nothing grew', () => {
+    const old = initialState(T0) as unknown as Record<string, unknown>;
+    delete old.land;
+    const fields = { ...(old.fields as GameState['fields']), tomatoes: [], vegetables: [] };
+    const s = migrate({ ...old, fields, version: 5 } as unknown as GameState, 5);
+    expect(s.land.tomatoes).toBe('empty');
+    expect(s.land.vegetables).toBe('empty');
+    expect(s.land.corn).toBe('field');
+  });
+
+  it('a save missing its starting land is mended on load, whatever its version', () => {
+    const broken = { ...initialState(T0), land: { east: 'field' as const }, fields: { ...initialState(T0).fields, tomatoes: [], east: [] } };
+    const s = repair(broken);
+    expect(s.land.tomatoes).toBe('empty');
+    expect(s.land.vegetables).toBe('field');
+    expect(s.fields.east).toHaveLength(8);
+    expect(repair({ ...initialState(T0), land: { ...initialState(T0).land, corn: 'solar' } }).fields.corn).toEqual([]);
+  });
+
+  it('an older copy of the game cannot write over a newer save', async () => {
+    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+    await AsyncStorage.setItem(SAVE_KEY, JSON.stringify({ state: { coins: 1 }, version: SAVE_VERSION + 1 }));
+    useGame.setState({ coins: 777 });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(JSON.parse((await AsyncStorage.getItem(SAVE_KEY))!).state.coins).toBe(1);
+    await AsyncStorage.setItem(SAVE_KEY, JSON.stringify({ state: { coins: 1 }, version: SAVE_VERSION - 1 }));
+    useGame.setState({ coins: 778 });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(JSON.parse((await AsyncStorage.getItem(SAVE_KEY))!).state.coins).toBe(778);
   });
 });
